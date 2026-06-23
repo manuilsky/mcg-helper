@@ -1,0 +1,136 @@
+/* ============================================
+   MCG Helper — Bitbucket Content Script Styles
+   ============================================ */
+
+/* ---------- Button group container ---------- */
+.mcg-bb-actions {
+  display: flex;
+  gap: 6px;
+  margin: 8px 0 4px 0;
+  flex-wrap: wrap;
+}
+
+/* ---------- Create PR / Task Buttons (Bitbucket default/grey AUI-style, like Blame) ---------- */
+.mcg-bb-create-pr {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin: 0 !important;
+  padding: 6px 12px !important;
+  font-size: 12px !important;
+  font-weight: normal !important;
+  line-height: 1.42857 !important;
+  text-decoration: none !important;
+  border-radius: 3px !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+  vertical-align: middle !important;
+  /* Bitbucket default grey button */
+  background-color: #f4f5f7 !important;
+  color: #344563 !important;
+  border: 1px solid #dfe1e6 !important;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.mcg-bb-create-pr:hover {
+  background-color: #ebecf0 !important;
+  border-color: #c1c7d0 !important;
+  color: #344563 !important;
+  text-decoration: none !important;
+}
+
+.mcg-bb-create-pr:active {
+  background-color: #dfe1e6 !important;
+}
+
+.mcg-bb-create-pr .mcg-pr-icon {
+  display: inline-flex !important;
+  align-items: center;
+  width: auto !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
+
+.mcg-bb-create-pr svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+
+/* ---------- Copy Tasks Widget ---------- */
+.mcg-bb-copy-widget-wrapper {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin-right: 8px !important;
+}
+
+.mcg-bb-date-input {
+  height: 30px !important;
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+  font-family: inherit !important;
+  border: 1px solid #dfe1e6 !important;
+  border-radius: 3px !important;
+  background-color: #fff !important;
+  color: #333 !important;
+  box-sizing: border-box !important;
+}
+
+.mcg-bb-date-input:focus {
+  border-color: #0052cc !important;
+  outline: none !important;
+}
+
+.mcg-bb-date-input-hidden {
+  position: absolute !important;
+  opacity: 0.01 !important;
+  width: 100% !important;
+  height: 100% !important;
+  left: 0 !important;
+  top: 0 !important;
+  z-index: 99999 !important;
+  border: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  pointer-events: none !important;
+  box-sizing: border-box !important;
+}
+
+.mcg-bb-copy-tasks-btn {
+  margin-right: 0 !important;
+  /* Managed by wrapper gap */
+}
+
+/* ---------- Toast Notification ---------- */
+.mcg-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100000;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+  opacity: 0;
+  transform: translateY(12px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.mcg-toast--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.mcg-toast--error {
+  background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.3);
+}

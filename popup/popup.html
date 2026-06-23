@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MCG Helper</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup">
+    <header class="popup-header">
+      <div class="popup-logo">
+        <img src="../icons/icon32.png" alt="MCG Helper" width="24" height="24">
+        <h1>MCG Helper</h1>
+      </div>
+      <span class="popup-version" id="version"></span>
+    </header>
+
+    <div class="popup-body">
+      <p class="popup-description">
+        Helper for MyCloudGrocer Task Tracker.
+      </p>
+
+      <div class="popup-status" id="status">
+        <span class="status-dot"></span>
+        <span class="status-text">Checking page…</span>
+      </div>
+
+      <div class="popup-deployments" id="deployments-section" style="display: none;">
+        <h2 class="section-title">Deployed Branches</h2>
+        <div class="deployments-list" id="deployments-list"></div>
+        <button class="expand-btn" id="btn-expand-deployments" style="display: none;">
+          <span>Show More Services</span>
+          <svg class="expand-icon" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+        <div class="deployments-list deployments-more" id="deployments-more-list" style="display: none;"></div>
+      </div>
+
+      <div class="popup-actions" id="actions" style="display: none;">
+        <button class="popup-btn" id="btn-copy-id">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+          </svg>
+          <span>Copy Task ID</span>
+        </button>
+        <button class="popup-btn popup-btn--secondary" id="btn-copy-link">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/>
+          </svg>
+          <span>Copy Link</span>
+        </button>
+      </div>
+    </div>
+
+    <footer class="popup-footer">
+      <a href="https://bugs.mycloudgrocer.com/" target="_blank" rel="noopener">Open Tracker</a>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
