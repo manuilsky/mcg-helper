@@ -2,7 +2,7 @@
  * MCG Helper — Popup Script
  */
 
-const API_KEY = 'YOUR_API_KEY_HERE';
+const API_KEY = window.API_KEY || '';
 const API_BASE = 'https://bugs.mycloudgrocer.com/api';
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -14,6 +14,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const statusText = statusEl.querySelector('.status-text');
   const actionsEl = document.getElementById('actions');
   const deploymentsEl = document.getElementById('deployments-section');
+
+  if (!API_KEY) {
+    statusText.textContent = 'API Key missing. Please configure config.js';
+    statusEl.classList.add('inactive');
+    return;
+  }
 
   try {
     // Query the active tab
