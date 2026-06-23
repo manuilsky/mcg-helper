@@ -21,11 +21,13 @@ jobs:
 
       - name: Pack extension
         run: |
-          cp -r . /tmp/extension
           chromium-browser \
-            --pack-extension=/tmp/extension \
+            --pack-extension=./src \
             --pack-extension-key=./key.pem
-          mv /tmp/extension.crx extension.crx
+
+      - name: Rename artifact
+        run: mv src.crx extension.crx
+
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
