@@ -1,0 +1,198 @@
+/* ============================================
+   MCG Helper — Content Script Styles
+   ============================================ */
+
+/* ---------- Floating Toolbar ---------- */
+.mcg-toolbar {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/* ---------- Toolbar Buttons ---------- */
+.mcg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+  box-shadow:
+    0 4px 14px rgba(79, 70, 229, 0.35),
+    0 1px 3px rgba(0, 0, 0, 0.12);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  user-select: none;
+  line-height: 1;
+}
+
+.mcg-btn:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 8px 22px rgba(79, 70, 229, 0.45),
+    0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.mcg-btn:active {
+  transform: translateY(0);
+  box-shadow:
+    0 2px 8px rgba(79, 70, 229, 0.3),
+    0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.mcg-btn svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  fill: currentColor;
+}
+
+/* --- Button variants --- */
+.mcg-btn--secondary {
+  background: linear-gradient(135deg, #0EA5E9 0%, #14B8A6 100%);
+  box-shadow:
+    0 4px 14px rgba(14, 165, 233, 0.35),
+    0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.mcg-btn--secondary:hover {
+  box-shadow:
+    0 8px 22px rgba(14, 165, 233, 0.45),
+    0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+/* --- Copied state --- */
+.mcg-btn--copied {
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
+  box-shadow:
+    0 4px 14px rgba(16, 185, 129, 0.35),
+    0 1px 3px rgba(0, 0, 0, 0.12) !important;
+}
+
+/* ---------- Toast Notification ---------- */
+.mcg-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 100000;
+  padding: 12px 20px;
+  border-radius: 10px;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+  opacity: 0;
+  transform: translateY(12px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+.mcg-toast--visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.mcg-toast--error {
+  background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.3);
+}
+
+/* ---------- Toggle Button (FAB) ---------- */
+.mcg-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 99998;
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 14px;
+  cursor: pointer;
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+  box-shadow:
+    0 4px 14px rgba(79, 70, 229, 0.4),
+    0 1px 3px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  color: #fff;
+}
+
+.mcg-fab:hover {
+  transform: scale(1.08);
+  box-shadow:
+    0 8px 22px rgba(79, 70, 229, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.15);
+}
+
+.mcg-fab svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+  transition: transform 0.3s ease;
+}
+
+.mcg-fab--open svg {
+  transform: rotate(45deg);
+}
+
+/* ---------- Toolbar expand/collapse animation ---------- */
+.mcg-toolbar--hidden {
+  pointer-events: none;
+}
+
+.mcg-toolbar--hidden .mcg-btn {
+  opacity: 0;
+  transform: translateX(20px);
+  pointer-events: none;
+}
+
+.mcg-toolbar .mcg-btn {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.mcg-toolbar .mcg-btn:nth-child(1) {
+  transition-delay: 0.03s;
+}
+
+.mcg-toolbar .mcg-btn:nth-child(2) {
+  transition-delay: 0.06s;
+}
+
+.mcg-toolbar .mcg-btn:nth-child(3) {
+  transition-delay: 0.09s;
+}
+
+.mcg-toolbar .mcg-btn:nth-child(4) {
+  transition-delay: 0.12s;
+}
+
+.mcg-toolbar .mcg-btn:nth-child(5) {
+  transition-delay: 0.15s;
+}
+
+/* Additional styles */
+
+img {
+  max-width: 100%;
+}
+
+#posts {
+  max-width: 98vw;
+}
