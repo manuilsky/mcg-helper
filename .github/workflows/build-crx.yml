@@ -21,15 +21,19 @@ jobs:
 
       - name: Pack extension
         run: |
+          cp -r . /tmp/extension
           chromium-browser \
-            --pack-extension=./src \
+            --pack-extension=/tmp/extension \
             --pack-extension-key=./key.pem
-
-      - name: Rename artifact
-        run: mv src.crx extension.crx
+          mv /tmp/extension.crx extension.crx
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: extension-crx
           path: extension.crx
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: extension.crx
