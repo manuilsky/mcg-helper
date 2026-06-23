@@ -1,0 +1,35 @@
+name: Build CRX
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write private key
+        run: echo "${{ secrets.CRX_PRIVATE_KEY }}" > key.pem
+
+      - name: Install Chromium
+        run: sudo apt-get install -y chromium-browser
+
+      - name: Pack extension
+        run: |
+          chromium-browser \
+            --pack-extension=./src \
+            --pack-extension-key=./key.pem
+
+      - name: Rename artifact
+        run: mv src.crx extension.crx
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-crx
+          path: extension.crx
