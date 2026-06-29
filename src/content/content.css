@@ -98,6 +98,7 @@
   transform: translateY(12px);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: none;
+  white-space: pre-line;
 }
 
 .mcg-toast--visible {
@@ -108,6 +109,11 @@
 .mcg-toast--error {
   background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
   box-shadow: 0 8px 24px rgba(239, 68, 68, 0.3);
+}
+
+.mcg-toast--info {
+  background: linear-gradient(135deg, #3B82F6 0%, #2563EB 100%);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3);
 }
 
 /* ---------- Toggle Button (FAB) ---------- */
@@ -195,4 +201,76 @@ img {
 
 #posts {
   max-width: 98vw;
+}
+
+/* ---------- Toast Left Position ---------- */
+.mcg-toast--left {
+  right: auto !important;
+  left: 20px !important;
+  box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+}
+
+.mcg-toast--left.mcg-toast--error {
+  box-shadow: 0 8px 24px rgba(239, 68, 68, 0.3);
+}
+
+.mcg-toast--left.mcg-toast--info {
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3);
+}
+
+/* ---------- Check Build Button ---------- */
+.mcg-check-build-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  padding: 4px;
+  margin-left: 8px;
+  border-radius: 50%;
+  cursor: pointer;
+  color: #6B7280; /* Neutral gray */
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  vertical-align: middle;
+}
+
+.mcg-check-build-btn:hover {
+  background-color: rgba(79, 70, 229, 0.1);
+  color: #4F46E5; /* Indigo */
+  transform: scale(1.15);
+}
+
+.mcg-check-build-btn:active {
+  transform: scale(0.95);
+}
+
+.mcg-check-build-btn svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+/* --- Loading state --- */
+.mcg-check-build-btn--loading {
+  color: #3B82F6 !important;
+  pointer-events: none;
+  animation: mcg-spin 1s linear infinite;
+}
+
+@keyframes mcg-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* --- Result states (flashing) --- */
+.mcg-check-build-btn--success {
+  color: #10B981 !important;
+}
+
+.mcg-check-build-btn--error {
+  color: #EF4444 !important;
+}
+
+.mcg-check-build-btn--info {
+  color: #3B82F6 !important;
 }

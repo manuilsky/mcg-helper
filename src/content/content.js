@@ -133,4 +133,479 @@
   document.body.appendChild(toolbar);
 
   console.log('[MCG Helper] Toolbar injected successfully.');
+
+  // ── Build Verification Logic ────────────────────────────────
+
+  function normalizeBranch(br) {
+    if (!br) return '';
+    return br.trim().toLowerCase().replace(/-/g, '/');
+  }
+
+  function isBackendProject(projectName) {
+    const name = (projectName || '').toLowerCase();
+    return name.includes('web') || (!name.includes('storefront') && !name.includes('react') && !name.includes('mobile'));
+  }
+
+  function resetButton(btn) {
+    btn.classList.remove('mcg-check-build-btn--loading');
+  }
+
+  async function checkAnyTaskActivity(apiToken, currentTaskId) {
+    // Check DOM comments first (fastest)
+    const postsTable = document.getElementById('posts_table');
+    if (postsTable) {
+      const rows = postsTable.querySelectorAll('tr td.cmt, tr td.cmt_selected');
+      for (const cell of rows) {
+        const text = cell.textContent.toLowerCase();
+        if (text.includes('commit') || text.includes('merged') || text.includes('pull request') || text.includes(`task/${currentTaskId}`)) {
+          return true;
+        }
+      }
+    }
+
+    if (apiToken) {
+      try {
+        const mergesUrl = `https://bugs.mycloudgrocer.com/api/merges/bug/${currentTaskId}`;
+        const mergesRes = await fetch(mergesUrl, {
+          headers: { 'X-Api-Key': apiToken, 'Accept': 'application/json' }
+        });
+        if (mergesRes.ok) {
+          const merges = await mergesRes.json();
+          if (merges.length > 0) return true;
+        }
+      } catch (err) {
+        console.warn(err);
+      }
+
+      try {
+        const bugUrl = `https://bugs.mycloudgrocer.com/api/bugs/${currentTaskId}`;
+        const bugRes = await fetch(bugUrl, {
+          headers: { 'X-Api-Key': apiToken, 'Accept': 'application/json' }
+        });
+        if (bugRes.ok) {
+          const bug = await bugRes.json();
+          if (bug.taskBranch || bug.sprintBranch || bug.sprintBranchMergedOnUtc) {
+            return true;
+          }
+        }
+      } catch (err) {
+        console.warn(err);
+      }
+    }
+
+    return false;
+  }
+
+  function getMergeTimeFromDOM(isBackend, branchName) {
+    const postsTable = document.getElementById('posts_table');
+    if (!postsTable) return null;
+    
+    const targetBranchNorm = normalizeBranch(branchName);
+    const rows = postsTable.querySelectorAll('tr td.cmt, tr td.cmt_selected');
+    
+    let latestMergeTime = null;
+    
+    rows.forEach(cell => {
+      const text = cell.textContent;
+      if (text.includes('Merged') || text.includes('Commit')) {
+        const normalizedText = text.toLowerCase();
+        if (normalizedText.includes(targetBranchNorm) || normalizedText.includes(targetBranchNorm.replace(/\//g, '-'))) {
+          // Check if this comment pertains to backend vs frontend
+          const isCommitBE = isBackendProject(text);
+          if (isBackend === isCommitBE) {
+            const headerEl = cell.querySelector('.pst');
+            if (headerEl) {
+              const headerText = headerEl.textContent;
+              const match = headerText.match(/on\s+([0-9/:\sAMPMampm]+?)(?:,|$)/);
+              if (match) {
+                const dateStr = match[1].trim();
+                const parsedDate = new Date(dateStr);
+                if (!isNaN(parsedDate.getTime())) {
+                  if (!latestMergeTime || parsedDate > latestMergeTime) {
+                    latestMergeTime = parsedDate;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+    
+    return latestMergeTime;
+  }
+
+  function getCommentTime(tableElement) {
+    const postCell = tableElement.closest('td.cmt, td.cmt_selected');
+    if (!postCell) return null;
+    
+    const headerEl = postCell.querySelector('.pst');
+    if (!headerEl) return null;
+    
+    const headerText = headerEl.textContent;
+    const match = headerText.match(/on\s+([0-9/:\sAMPMampm]+?)(?:,|$)/);
+    if (match) {
+      const dateStr = match[1].trim();
+      const parsedDate = new Date(dateStr);
+      if (!isNaN(parsedDate.getTime())) {
+        return parsedDate;
+      }
+    }
+    return null;
+  }
+
+  async function checkBuildFix(btn, isBackend, branchName, buildStr, table) {
+    btn.classList.add('mcg-check-build-btn--loading');
+    btn.classList.remove('mcg-check-build-btn--success', 'mcg-check-build-btn--error');
+
+    try {
+      const { apiKey } = await chrome.storage.local.get('apiKey');
+      const apiToken = apiKey || '';
+
+      if (!branchName) {
+        MCGUtils.showToast('Branch name is missing in the table.', 'error', 4000, 'left');
+        resetButton(btn);
+        btn.classList.add('mcg-check-build-btn--error');
+        return;
+      }
+
+      if (!buildStr) {
+        MCGUtils.showToast('Build number is missing in the table.', 'error', 4000, 'left');
+        resetButton(btn);
+        btn.classList.add('mcg-check-build-btn--error');
+        return;
+      }
+
+      const currentTaskId = MCGUtils.getTaskId();
+      let mergeTime = null;
+      let mergeSource = '';
+      let detectedProject = null;
+      let detectedSprintBranch = null;
+
+      // ── TIER 1: Query API Merges History ───────────────────
+      if (apiToken) {
+        try {
+          const mergesUrl = `https://bugs.mycloudgrocer.com/api/merges/bug/${currentTaskId}`;
+          const mergesRes = await fetch(mergesUrl, {
+            headers: {
+              'X-Api-Key': apiToken,
+              'Accept': 'application/json'
+            }
+          });
+
+          if (mergesRes.ok) {
+            const merges = await mergesRes.json();
+            const normalizedTargetBranch = normalizeBranch(branchName);
+
+            const matchingMerges = merges.filter(m => 
+              normalizeBranch(m.toBranch) === normalizedTargetBranch || 
+              normalizeBranch(m.fromBranch) === normalizedTargetBranch
+            );
+
+            const merge = matchingMerges.find(m => {
+              const isMergeBE = isBackendProject(m.project);
+              return isBackend ? isMergeBE : !isMergeBE;
+            });
+
+            if (merge) {
+              mergeTime = new Date(merge.mergedOnUtc);
+              mergeSource = 'API merges history';
+              detectedProject = merge.project;
+              detectedSprintBranch = merge.toBranch;
+              console.log(`[MCG Helper] Found merge time via Tier 1 (API merges): ${mergeTime} (source: ${mergeSource})`);
+            }
+          }
+        } catch (err) {
+          console.warn('[MCG Helper] Failed Tier 1 merges API query', err);
+        }
+      }
+
+      // ── TIER 2: Query API Bug Details (Column SprintBranchMergedOnUtc) ─
+      if (!mergeTime && apiToken) {
+        try {
+          const bugUrl = `https://bugs.mycloudgrocer.com/api/bugs/${currentTaskId}`;
+          const bugRes = await fetch(bugUrl, {
+            headers: {
+              'X-Api-Key': apiToken,
+              'Accept': 'application/json'
+            }
+          });
+
+          if (bugRes.ok) {
+            const bug = await bugRes.json();
+            if (bug.sprintBranch && bug.sprintBranchMergedOnUtc) {
+              const normalizedBugBranch = normalizeBranch(bug.sprintBranch);
+              const normalizedTargetBranch = normalizeBranch(branchName);
+
+              // check if it includes target branch and matches project type
+              const isBugBE = isBackendProject(bug.sprintBranch);
+              if (normalizedBugBranch.includes(normalizedTargetBranch) && (isBackend === isBugBE)) {
+                mergeTime = new Date(bug.sprintBranchMergedOnUtc);
+                mergeSource = 'API task details';
+                detectedSprintBranch = bug.sprintBranch.split(' ')[0]; // Extract branch from e.g. "sprint/rs34.2 repo"
+                console.log(`[MCG Helper] Found merge time via Tier 2 (API bug details): ${mergeTime} (source: ${mergeSource})`);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[MCG Helper] Failed Tier 2 bug API query', err);
+        }
+      }
+
+      // ── TIER 3: Scrape Comments from DOM ───────────────────
+      if (!mergeTime) {
+        const domMergeTime = getMergeTimeFromDOM(isBackend, branchName);
+        if (domMergeTime) {
+          mergeTime = domMergeTime;
+          mergeSource = 'Page comments (DOM)';
+          console.log(`[MCG Helper] Found merge time via Tier 3 (DOM scraping): ${mergeTime} (source: ${mergeSource})`);
+        }
+      }
+
+      if (!mergeTime) {
+        const hasActivity = await checkAnyTaskActivity(apiToken, currentTaskId);
+        resetButton(btn);
+        if (hasActivity) {
+          MCGUtils.showToast(`❌ Fix is found but has NOT been merged into ${branchName} yet.`, 'error', 5000, 'left');
+          btn.classList.add('mcg-check-build-btn--error');
+        } else {
+          MCGUtils.showToast(`ℹ️ Fix is not found (no branch or commits detected for task #${currentTaskId}).`, 'info', 5000, 'left');
+          btn.classList.add('mcg-check-build-btn--info');
+        }
+        return;
+      }
+
+      // 2. Parse build string into major / minor
+      const parts = buildStr.trim().split('.');
+      const buildNumberMinor = parts.length > 1 ? parseInt(parts[0], 10) : 0;
+      const buildNumber = parts.length > 1 ? parseInt(parts[1], 10) : parseInt(parts[0], 10);
+
+      // Branch candidates for builds query
+      const branchCandidates = [
+        branchName.trim(),
+        branchName.trim().replace(/-/g, '/'),
+        branchName.trim().replace(/\//g, '-')
+      ];
+      if (detectedSprintBranch) {
+        branchCandidates.unshift(detectedSprintBranch);
+      }
+
+      let matchedBuild = null;
+      const project = detectedProject || (isBackend ? 'web' : 'react');
+
+      if (apiToken) {
+        // Query builds using candidates
+        for (const br of [...new Set(branchCandidates)]) {
+          try {
+            const buildUrl = `https://bugs.mycloudgrocer.com/api/builds?project=${encodeURIComponent(project)}&branch=${encodeURIComponent(br)}&pageSize=100`;
+            const res = await fetch(buildUrl, {
+              headers: {
+                'X-Api-Key': apiToken,
+                'Accept': 'application/json'
+              }
+            });
+            if (res.ok) {
+              const builds = await res.json();
+              const found = builds.find(b => b.buildNumber === buildNumber && b.buildNumberMinor === buildNumberMinor);
+              if (found) {
+                matchedBuild = found;
+                break;
+              }
+            }
+          } catch (err) {
+            console.warn(`Failed fetching builds for branch ${br}`, err);
+          }
+        }
+
+        // Fallback: search latest 100 builds for project
+        if (!matchedBuild) {
+          try {
+            const buildUrl = `https://bugs.mycloudgrocer.com/api/builds?project=${encodeURIComponent(project)}&pageSize=100`;
+            const res = await fetch(buildUrl, {
+              headers: {
+                'X-Api-Key': apiToken,
+                'Accept': 'application/json'
+              }
+            });
+            if (res.ok) {
+              const builds = await res.json();
+              matchedBuild = builds.find(b => b.buildNumber === buildNumber && b.buildNumberMinor === buildNumberMinor);
+            }
+          } catch (err) {
+            console.warn(`Failed fallback builds query`, err);
+          }
+        }
+      }
+
+      if (!matchedBuild) {
+        // If apiToken is missing or build is not found, we can't get build start time
+        if (!apiToken) {
+          MCGUtils.showToast('API Key missing. Cannot fetch build details from database. Please configure it in popup.', 'error', 5000, 'left');
+        } else {
+          MCGUtils.showToast(`Build ${buildStr} was not found in the database.`, 'error', 5000, 'left');
+        }
+        resetButton(btn);
+        btn.classList.add('mcg-check-build-btn--error');
+        return;
+      }
+
+      // 3. Verify times
+      const buildTime = new Date(matchedBuild.startedOnUtc);
+      const isIncluded = buildTime > mergeTime;
+
+      // Warn if build is on a different branch
+      const normalizedTargetBranch = normalizeBranch(branchName);
+      const normalizedBuildBranch = normalizeBranch(matchedBuild.gitBranch);
+      const branchMatches = normalizedBuildBranch === normalizedTargetBranch;
+      
+      let branchWarning = '';
+      if (!branchMatches) {
+        branchWarning = `\n⚠️ Build is on branch ${matchedBuild.gitBranch}, but table says ${branchName}!`;
+      }
+
+      // Check if comment was created before merge
+      let commentWarning = '';
+      const commentTime = getCommentTime(table);
+      if (commentTime && mergeTime && commentTime < mergeTime) {
+        commentWarning = `\n⚠️ Build table comment was posted BEFORE the fix was merged!\n` +
+          `(Comment: ${commentTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} ${commentTime.toLocaleDateString()})`;
+      }
+
+      resetButton(btn);
+
+      const timeSourceInfo = `\n(Merge time found via: ${mergeSource})`;
+
+      if (isIncluded) {
+        btn.classList.add('mcg-check-build-btn--success');
+        const msg = `✅ Fix IS INCLUDED in build ${buildStr}!${branchWarning}${commentWarning}\n` +
+          `Merged: ${mergeTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} ${mergeTime.toLocaleDateString()}\n` +
+          `Build: ${buildTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} ${buildTime.toLocaleDateString()}` +
+          timeSourceInfo;
+        MCGUtils.showToast(msg, 'success', 8000, 'left');
+      } else {
+        btn.classList.add('mcg-check-build-btn--error');
+        const msg = `❌ Fix IS NOT INCLUDED in build ${buildStr}!${branchWarning}${commentWarning}\n` +
+          `Merged: ${mergeTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} ${mergeTime.toLocaleDateString()}\n` +
+          `Build: ${buildTime.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} ${buildTime.toLocaleDateString()}` +
+          timeSourceInfo;
+        MCGUtils.showToast(msg, 'error', 8000, 'left');
+      }
+
+    } catch (err) {
+      console.error('Error during build verification:', err);
+      MCGUtils.showToast(`Verification error: ${err.message}`, 'error', 5000, 'left');
+      resetButton(btn);
+      btn.classList.add('mcg-check-build-btn--error');
+    }
+  }
+
+  function isFEBranchKey(text) {
+    const t = text.toLowerCase().trim();
+    return t === 'front-end branch';
+  }
+
+  function isFEBuildKey(text) {
+    const t = text.toLowerCase().trim();
+    return t === 'fe build number' || t === 'front-end number' || t === 'fe number';
+  }
+
+  function isBEBranchKey(text) {
+    const t = text.toLowerCase().trim();
+    return t === 'back-end branch';
+  }
+
+  function isBEBuildKey(text) {
+    const t = text.toLowerCase().trim();
+    return t === 'be build number' || t === 'back-end number' || t === 'be number';
+  }
+
+  function createCheckButton(onClick) {
+    const btn = document.createElement('button');
+    btn.className = 'mcg-check-build-btn';
+    btn.type = 'button';
+    btn.title = 'Check if this build contains the task fix';
+    btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+      <polyline points="22 4 12 14.01 9 11.01"></polyline>
+    </svg>`;
+    
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onClick();
+    });
+    return btn;
+  }
+
+  function injectCheckButtons() {
+    const tables = document.querySelectorAll('table');
+    
+    tables.forEach(table => {
+      const text = table.textContent;
+      if (!text.includes('branch') && !text.includes('number')) return;
+      
+      const cells = Array.from(table.querySelectorAll('td, th'));
+      
+      for (let i = 0; i < cells.length; i++) {
+        const cellText = cells[i].textContent.trim();
+        
+        // 1. BE Build cell detection
+        if (isBEBuildKey(cellText)) {
+          const buildCell = cells[i].nextElementSibling;
+          const buildVal = buildCell ? buildCell.textContent.trim() : null;
+          if (buildVal && !buildCell.querySelector('.mcg-check-build-btn')) {
+            // Find closest preceding BE Branch key
+            let branchVal = null;
+            for (let j = i - 1; j >= 0; j--) {
+              if (isBEBranchKey(cells[j].textContent)) {
+                const branchCell = cells[j].nextElementSibling;
+                branchVal = branchCell ? branchCell.textContent.trim() : null;
+                break;
+              }
+            }
+            
+            const btn = createCheckButton(() => {
+              checkBuildFix(btn, true, branchVal, buildVal, table);
+            });
+            buildCell.appendChild(btn);
+          }
+        }
+        
+        // 2. FE Build cell detection
+        if (isFEBuildKey(cellText)) {
+          const buildCell = cells[i].nextElementSibling;
+          const buildVal = buildCell ? buildCell.textContent.trim() : null;
+          if (buildVal && !buildCell.querySelector('.mcg-check-build-btn')) {
+            // Find closest preceding FE Branch key
+            let branchVal = null;
+            for (let j = i - 1; j >= 0; j--) {
+              if (isFEBranchKey(cells[j].textContent)) {
+                const branchCell = cells[j].nextElementSibling;
+                branchVal = branchCell ? branchCell.textContent.trim() : null;
+                break;
+              }
+            }
+            
+            const btn = createCheckButton(() => {
+              checkBuildFix(btn, false, branchVal, buildVal, table);
+            });
+            buildCell.appendChild(btn);
+          }
+        }
+      }
+    });
+  }
+
+  // Run instantly on load
+  injectCheckButtons();
+
+  // MutationObserver to capture dynamically rendered tables in posts/comments
+  const observer = new MutationObserver(() => {
+    injectCheckButtons();
+  });
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true
+  });
 })();
+

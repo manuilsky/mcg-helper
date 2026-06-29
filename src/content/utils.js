@@ -68,10 +68,11 @@ const MCGUtils = {
   /**
    * Show a toast notification.
    * @param {string} message
-   * @param {'success'|'error'} type
+   * @param {'success'|'error'|'info'} type
    * @param {number} duration — ms
+   * @param {'right'|'left'} position
    */
-  showToast(message, type = 'success', duration = 2000) {
+  showToast(message, type = 'success', duration = 2000, position = 'right') {
     // Remove any existing toast
     const existing = document.querySelector('.mcg-toast');
     if (existing) existing.remove();
@@ -79,6 +80,8 @@ const MCGUtils = {
     const toast = document.createElement('div');
     toast.className = 'mcg-toast';
     if (type === 'error') toast.classList.add('mcg-toast--error');
+    if (type === 'info') toast.classList.add('mcg-toast--info');
+    if (position === 'left') toast.classList.add('mcg-toast--left');
     toast.textContent = message;
     document.body.appendChild(toast);
 

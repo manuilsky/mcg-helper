@@ -21,6 +21,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
+  // Cache API Key in local storage for content scripts
+  await chrome.storage.local.set({ apiKey: API_KEY });
+
   try {
     // Query the active tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
