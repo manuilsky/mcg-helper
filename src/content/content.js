@@ -449,6 +449,29 @@
         return;
       }
 
+      // Wrap the build number in a link to its deployments/build page
+      const buildCell = btn.parentElement;
+      if (buildCell) {
+        const buildId = matchedBuild.id !== undefined ? matchedBuild.id : matchedBuild.Id;
+        if (buildId && !buildCell.querySelector('.mcg-build-link')) {
+          const link = document.createElement('a');
+          link.href = `/monitor/deployments.aspx?BuildId=${buildId}`;
+          link.target = '_blank';
+          link.textContent = buildStr;
+          link.className = 'mcg-build-link';
+          
+          // Remove text nodes in buildCell to avoid duplicate text
+          Array.from(buildCell.childNodes).forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE) {
+              node.remove();
+            }
+          });
+          
+          // Insert link at the beginning
+          buildCell.insertBefore(link, buildCell.firstChild);
+        }
+      }
+
       // 3. Verify times
       const buildTime = new Date(matchedBuild.startedOnUtc);
       const isIncluded = buildTime > mergeTime;
