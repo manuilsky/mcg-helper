@@ -277,122 +277,24 @@
       }
 
       const currentTaskId = MCGUtils.getTaskId();
-      let mergeTime = null;
-      let mergeSource = '';
-      let detectedProject = null;
-      let detectedSprintBranch = null;
 
-      // ── TIER 1: Query API Merges History ───────────────────
-      if (apiToken) {
-        try {
-          const mergesUrl = `https://bugs.mycloudgrocer.com/api/merges/bug/${currentTaskId}`;
-          const mergesRes = await fetch(mergesUrl, {
-            headers: {
-              'X-Api-Key': apiToken,
-              'Accept': 'application/json'
-            }
-          });
-
-          if (mergesRes.ok) {
-            const merges = await mergesRes.json();
-            const normalizedTargetBranch = normalizeBranch(branchName);
-
-            const matchingMerges = merges.filter(m => 
-              normalizeBranch(m.toBranch) === normalizedTargetBranch || 
-              normalizeBranch(m.fromBranch) === normalizedTargetBranch
-            );
-
-            const merge = matchingMerges.find(m => {
-              const isMergeBE = isBackendProject(m.project);
-              return isBackend ? isMergeBE : !isMergeBE;
-            });
-
-            if (merge) {
-              mergeTime = new Date(merge.mergedOnUtc);
-              mergeSource = 'API merges history';
-              detectedProject = merge.project;
-              detectedSprintBranch = merge.toBranch;
-              console.log(`[MCG Helper] Found merge time via Tier 1 (API merges): ${mergeTime} (source: ${mergeSource})`);
-            }
-          }
-        } catch (err) {
-          console.warn('[MCG Helper] Failed Tier 1 merges API query', err);
-        }
-      }
-
-      // ── TIER 2: Query API Bug Details (Column SprintBranchMergedOnUtc) ─
-      if (!mergeTime && apiToken) {
-        try {
-          const bugUrl = `https://bugs.mycloudgrocer.com/api/bugs/${currentTaskId}`;
-          const bugRes = await fetch(bugUrl, {
-            headers: {
-              'X-Api-Key': apiToken,
-              'Accept': 'application/json'
-            }
-          });
-
-          if (bugRes.ok) {
-            const bug = await bugRes.json();
-            if (bug.sprintBranch && bug.sprintBranchMergedOnUtc) {
-              const normalizedBugBranch = normalizeBranch(bug.sprintBranch);
-              const normalizedTargetBranch = normalizeBranch(branchName);
-
-              // check if it includes target branch and matches project type
-              const isBugBE = isBackendProject(bug.sprintBranch);
-              if (normalizedBugBranch.includes(normalizedTargetBranch) && (isBackend === isBugBE)) {
-                mergeTime = new Date(bug.sprintBranchMergedOnUtc);
-                mergeSource = 'API task details';
-                detectedSprintBranch = bug.sprintBranch.split(' ')[0]; // Extract branch from e.g. "sprint/rs34.2 repo"
-                console.log(`[MCG Helper] Found merge time via Tier 2 (API bug details): ${mergeTime} (source: ${mergeSource})`);
-              }
-            }
-          }
-        } catch (err) {
-          console.warn('[MCG Helper] Failed Tier 2 bug API query', err);
-        }
-      }
-
-      // ── TIER 3: Scrape Comments from DOM ───────────────────
-      if (!mergeTime) {
-        const domMergeTime = getMergeTimeFromDOM(isBackend, branchName);
-        if (domMergeTime) {
-          mergeTime = domMergeTime;
-          mergeSource = 'Page comments (DOM)';
-          console.log(`[MCG Helper] Found merge time via Tier 3 (DOM scraping): ${mergeTime} (source: ${mergeSource})`);
-        }
-      }
-
-      if (!mergeTime) {
-        const hasActivity = await checkAnyTaskActivity(apiToken, currentTaskId);
-        resetButton(btn);
-        if (hasActivity) {
-          MCGUtils.showToast(`❌ Fix is found but has NOT been merged into ${branchName} yet.`, 'error', 5000, 'left');
-          btn.classList.add('mcg-check-build-btn--error');
-        } else {
-          MCGUtils.showToast(`ℹ️ Fix is not found (no branch or commits detected for task #${currentTaskId}).`, 'info', 5000, 'left');
-          btn.classList.add('mcg-check-build-btn--info');
-        }
-        return;
-      }
-
-      // 2. Parse build string into major / minor
+      // ── Step 1: Parse build string ───────────────────
       const parts = buildStr.trim().split('.');
       const buildNumberMinor = parts.length > 1 ? parseInt(parts[0], 10) : 0;
       const buildNumber = parts.length > 0 ? parseInt(parts[parts.length - 1], 10) : 0;
 
-      // Branch candidates for builds query
+      // ── Step 2: Query builds from DB first ────────────
+      // This allows us to resolve the build link immediately
       const branchCandidates = [
         branchName.trim(),
         branchName.trim().replace(/-/g, '/'),
         branchName.trim().replace(/\//g, '-')
       ];
-      if (detectedSprintBranch) {
-        branchCandidates.unshift(detectedSprintBranch);
-      }
+
+      // Since we don't have merges yet, project name defaults to web or react
+      const project = isBackend ? 'web' : 'react';
 
       let matchedBuild = null;
-      const project = detectedProject || (isBackend ? 'web' : 'react');
-
       if (apiToken) {
         // Query builds using candidates
         for (const br of [...new Set(branchCandidates)]) {
@@ -472,7 +374,107 @@
         }
       }
 
-      // 3. Verify times
+      // ── Step 3: Now resolve merges and mergeTime ────────
+      let mergeTime = null;
+      let mergeSource = '';
+      let detectedSprintBranch = null;
+
+      // ── TIER 1: Query API Merges History ───────────────────
+      if (apiToken) {
+        try {
+          const mergesUrl = `https://bugs.mycloudgrocer.com/api/merges/bug/${currentTaskId}`;
+          const mergesRes = await fetch(mergesUrl, {
+            headers: {
+              'X-Api-Key': apiToken,
+              'Accept': 'application/json'
+            }
+          });
+
+          if (mergesRes.ok) {
+            const merges = await mergesRes.json();
+            const normalizedTargetBranch = normalizeBranch(branchName);
+
+            const matchingMerges = merges.filter(m => 
+              normalizeBranch(m.toBranch) === normalizedTargetBranch || 
+              normalizeBranch(m.fromBranch) === normalizedTargetBranch
+            );
+
+            const merge = matchingMerges.find(m => {
+              const isMergeBE = isBackendProject(m.project);
+              return isBackend ? isMergeBE : !isMergeBE;
+            });
+
+            if (merge) {
+              mergeTime = new Date(merge.mergedOnUtc);
+              mergeSource = 'API merges history';
+              detectedSprintBranch = merge.toBranch;
+              console.log(`[MCG Helper] Found merge time via Tier 1 (API merges): ${mergeTime} (source: ${mergeSource})`);
+            }
+          }
+        } catch (err) {
+          console.warn('[MCG Helper] Failed Tier 1 merges API query', err);
+        }
+      }
+
+      // ── TIER 2: Query API Bug Details (Column SprintBranchMergedOnUtc) ─
+      if (!mergeTime && apiToken) {
+        try {
+          const bugUrl = `https://bugs.mycloudgrocer.com/api/bugs/${currentTaskId}`;
+          const bugRes = await fetch(bugUrl, {
+            headers: {
+              'X-Api-Key': apiToken,
+              'Accept': 'application/json'
+            }
+          });
+
+          if (bugRes.ok) {
+            const bug = await bugRes.json();
+            const sprintBranchField = bug.sprintBranch || bug.SprintBranch;
+            const sprintBranchMergedOnUtcField = bug.sprintBranchMergedOnUtc || bug.SprintBranchMergedOnUtc;
+
+            if (sprintBranchField && sprintBranchMergedOnUtcField) {
+              const normalizedBugBranch = normalizeBranch(sprintBranchField);
+              const normalizedTargetBranch = normalizeBranch(branchName);
+
+              // check if it includes target branch and matches project type
+              const isBugBE = isBackendProject(sprintBranchField);
+              if (normalizedBugBranch.includes(normalizedTargetBranch) && (isBackend === isBugBE)) {
+                mergeTime = new Date(sprintBranchMergedOnUtcField);
+                mergeSource = 'API task details';
+                detectedSprintBranch = sprintBranchField.split(' ')[0]; // Extract branch from e.g. "sprint/rs34.2 repo"
+                console.log(`[MCG Helper] Found merge time via Tier 2 (API bug details): ${mergeTime} (source: ${mergeSource})`);
+              }
+            }
+          }
+        } catch (err) {
+          console.warn('[MCG Helper] Failed Tier 2 bug API query', err);
+        }
+      }
+
+      // ── TIER 3: Scrape Comments from DOM ───────────────────
+      if (!mergeTime) {
+        const domMergeTime = getMergeTimeFromDOM(isBackend, branchName);
+        if (domMergeTime) {
+          mergeTime = domMergeTime;
+          mergeSource = 'Page comments (DOM)';
+          console.log(`[MCG Helper] Found merge time via Tier 3 (DOM scraping): ${mergeTime} (source: ${mergeSource})`);
+        }
+      }
+
+      if (!mergeTime) {
+        const hasActivity = await checkAnyTaskActivity(apiToken, currentTaskId);
+        resetButton(btn);
+        if (hasActivity) {
+          MCGUtils.showToast(`❌ Fix is found but has NOT been merged into ${branchName} yet.`, 'error', 5000, 'left');
+          btn.classList.add('mcg-check-build-btn--error');
+        } else {
+          MCGUtils.showToast(`ℹ️ Fix is not found (no branch or commits detected for task #${currentTaskId}).`, 'info', 5000, 'left');
+          btn.classList.add('mcg-check-build-btn--info');
+        }
+        return;
+      }
+
+      // ── Step 4: Verify times ───────────────────────────
       const buildTime = new Date(matchedBuild.startedOnUtc);
       const isIncluded = buildTime > mergeTime;
 
@@ -480,7 +482,7 @@
       const normalizedTargetBranch = normalizeBranch(branchName);
       const normalizedBuildBranch = normalizeBranch(matchedBuild.gitBranch);
       const branchMatches = normalizedBuildBranch === normalizedTargetBranch;
-      
+
       let branchWarning = '';
       if (!branchMatches) {
         branchWarning = `\n⚠️ Build is on branch ${matchedBuild.gitBranch}, but table says ${branchName}!`;
