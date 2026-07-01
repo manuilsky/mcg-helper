@@ -10,6 +10,7 @@
     "storage"
   ],
   "host_permissions": [
+    "https://*.mycloudgrocer.com/*",
     "https://bugs.mycloudgrocer.com/*",
     "https://git.mycloudgrocer.com/*"
   ],
@@ -33,7 +34,7 @@
   "content_scripts": [
     {
       "matches": ["https://bugs.mycloudgrocer.com/*"],
-      "js": ["content/utils.js", "content/content.js"],
+      "js": ["popup/config.js", "content/utils.js", "content/content.js"],
       "css": ["content/content.css"],
       "run_at": "document_end"
     },
@@ -42,6 +43,15 @@
       "js": ["content/utils.js", "content/bitbucket.js"],
       "css": ["content/bitbucket.css"],
       "run_at": "document_start"
+    },
+    {
+      "matches": ["https://*.mycloudgrocer.com/*"],
+      "exclude_matches": [
+        "https://bugs.mycloudgrocer.com/*",
+        "https://git.mycloudgrocer.com/*"
+      ],
+      "js": ["content/stage.js"],
+      "run_at": "document_end"
     }
   ]
 }

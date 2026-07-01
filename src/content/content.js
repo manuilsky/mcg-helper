@@ -260,7 +260,7 @@
 
     try {
       const { apiKey } = await chrome.storage.local.get('apiKey');
-      const apiToken = apiKey || '';
+      const apiToken = apiKey || window.API_KEY || '';
 
       if (!branchName) {
         MCGUtils.showToast('Branch name is missing in the table.', 'error', 4000, 'left');
@@ -522,24 +522,33 @@
     }
   }
 
+  function normalizeKey(text) {
+    if (!text) return '';
+    return text.toLowerCase()
+               .trim()
+               .replace(/:$/, '') // Remove trailing colon
+               .replace(/-/g, ' ') // Replace hyphens with spaces
+               .replace(/\s+/g, ' '); // Normalize spaces
+  }
+
   function isFEBranchKey(text) {
-    const t = text.toLowerCase().trim();
-    return t === 'front-end branch';
+    const t = normalizeKey(text);
+    return t === 'front end branch' || t === 'fe branch';
   }
 
   function isFEBuildKey(text) {
-    const t = text.toLowerCase().trim();
-    return t === 'fe build number' || t === 'front-end number' || t === 'fe number';
+    const t = normalizeKey(text);
+    return t === 'fe build number' || t === 'front end number' || t === 'fe number';
   }
 
   function isBEBranchKey(text) {
-    const t = text.toLowerCase().trim();
-    return t === 'back-end branch';
+    const t = normalizeKey(text);
+    return t === 'back end branch' || t === 'be branch';
   }
 
   function isBEBuildKey(text) {
-    const t = text.toLowerCase().trim();
-    return t === 'be build number' || t === 'back-end number' || t === 'be number';
+    const t = normalizeKey(text);
+    return t === 'be build number' || t === 'back end number' || t === 'be number';
   }
 
   function createCheckButton(onClick) {
