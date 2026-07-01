@@ -378,7 +378,7 @@
       // 2. Parse build string into major / minor
       const parts = buildStr.trim().split('.');
       const buildNumberMinor = parts.length > 1 ? parseInt(parts[0], 10) : 0;
-      const buildNumber = parts.length > 1 ? parseInt(parts[1], 10) : parseInt(parts[0], 10);
+      const buildNumber = parts.length > 0 ? parseInt(parts[parts.length - 1], 10) : 0;
 
       // Branch candidates for builds query
       const branchCandidates = [
