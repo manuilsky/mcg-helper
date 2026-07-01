@@ -538,7 +538,7 @@
 
   function isFEBuildKey(text) {
     const t = normalizeKey(text);
-    return t === 'fe build number' || t === 'front end number' || t === 'fe number';
+    return t === 'fe build number' || t === 'front end number' || t === 'fe number' || t === 'fe build' || t === 'front end build';
   }
 
   function isBEBranchKey(text) {
@@ -548,7 +548,7 @@
 
   function isBEBuildKey(text) {
     const t = normalizeKey(text);
-    return t === 'be build number' || t === 'back end number' || t === 'be number';
+    return t === 'be build number' || t === 'back end number' || t === 'be number' || t === 'be build' || t === 'back end build';
   }
 
   function createCheckButton(onClick) {
@@ -569,13 +569,18 @@
     return btn;
   }
 
+  function debounce(func, wait) {
+    let timeout;
+    return function(...args) {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+  }
+
   function injectCheckButtons() {
     const tables = document.querySelectorAll('table');
     
     tables.forEach(table => {
-      const text = table.textContent;
-      if (!text.includes('branch') && !text.includes('number')) return;
-      
       const cells = Array.from(table.querySelectorAll('td, th'));
       
       for (let i = 0; i < cells.length; i++) {
@@ -628,12 +633,14 @@
     });
   }
 
+  const debouncedInject = debounce(injectCheckButtons, 100);
+
   // Run instantly on load
   injectCheckButtons();
 
   // MutationObserver to capture dynamically rendered tables in posts/comments
   const observer = new MutationObserver(() => {
-    injectCheckButtons();
+    debouncedInject();
   });
   observer.observe(document.documentElement, {
     childList: true,
