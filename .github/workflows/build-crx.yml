@@ -17,15 +17,15 @@ jobs:
         run: echo "window.API_KEY = '${{ secrets.MCG_API_KEY }}';" > src/popup/config.js
 
       - name: Pack extension
-        run: cd src && zip -r ../mcg-helper.zip . -x "*.git*" -x ".github/*"
+        run: cd src && zip -r ../extension.zip . -x "*.git*" -x ".github/*"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: extension-zip
-          path: mcg-helper.zip
+          path: extension.zip
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: mcg-helper.zip
+          files: extension.zip

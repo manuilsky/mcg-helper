@@ -372,6 +372,20 @@ body {
   transform: translateY(0);
 }
 
+.qa-btn:disabled {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.04);
+  color: #475569;
+  cursor: not-allowed;
+}
+
+.qa-btn:disabled:hover {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255, 255, 255, 0.04);
+  color: #475569;
+  transform: none;
+}
+
 /* Tooltip styles */
 .qa-tooltip {
   position: absolute;
@@ -428,5 +442,21 @@ body {
   opacity: 1;
   visibility: visible;
   transform: translateX(-50%) translateY(-8px);
+}
+
+/* Align the first button's tooltip to the left to prevent clipping at the window edge */
+#btn-qa-login .qa-tooltip {
+  left: 0;
+  transform: translateY(-6px);
+}
+
+#btn-qa-login .qa-tooltip::after,
+#btn-qa-login .qa-tooltip::before {
+  left: 18px;
+}
+
+#btn-qa-login:hover .qa-tooltip,
+#btn-qa-login.force-tooltip .qa-tooltip {
+  transform: translateY(-8px);
 }
 

@@ -16,7 +16,7 @@
   const pathname = window.location.pathname.toLowerCase().replace(/\/$/, '');
 
   // 1. Auto-login handler
-  if (pathname === '/login') {
+  if (pathname.startsWith('/login') || pathname.endsWith('/login')) {
     chrome.storage.local.get(['autoLogin'], (result) => {
       if (result && result.autoLogin) {
         const { username, password, timestamp } = result.autoLogin;
@@ -65,8 +65,8 @@
     setInputValue(passwordInput, password);
 
     // Look for submit button
-    let loginBtn = document.querySelector('button[type="submit"]') ||
-                   document.querySelector('input[type="submit"]');
+    let loginBtn = document.querySelector('.form-submit-btn[type="submit"]') ||
+                   document.querySelector('button[type="submit"]');
 
     if (!loginBtn) {
       const buttons = Array.from(document.querySelectorAll('button, input[type="button"], a, [role="button"]'));
@@ -77,9 +77,14 @@
     }
 
     if (loginBtn) {
-      setTimeout(() => {
+      const intId = setInterval(() => {
+        console.log('int')
         loginBtn.click();
-      }, 150);
+
+        if (!document.location.pathname.includes('/login') || document.querySelector('.login-text-field-wrapper > .login-error') !== null) {
+          clearInterval(intId);
+        }
+      }, 15);
     } else {
       const form = emailInput.closest('form');
       if (form) {
