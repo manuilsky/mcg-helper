@@ -58,7 +58,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const quickActionsEl = document.getElementById('quick-actions-section');
       if (quickActionsEl) {
         quickActionsEl.style.display = 'flex';
-        setupQuickActions(tab);
+        await setupQuickActions(tab);
       }
       
       await loadDeployments(storeName, stageName);
@@ -432,20 +432,41 @@ function showQaButtonFeedback(btnId, msg) {
 /**
  * Setup event listeners for staging page Quick Actions
  */
-function setupQuickActions(tab) {
+async function setupQuickActions(tab) {
   const btnLogin = document.getElementById('btn-qa-login');
   if (btnLogin) {
     // Clone button to strip any pre-existing listeners
     const newBtn = btnLogin.cloneNode(true);
     btnLogin.parentNode.replaceChild(newBtn, btnLogin);
 
+    // Check if the user is already logged in via active tab's localStorage
+    let isLoggedIn = false;
+    try {
+      const [{ result }] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => localStorage.getItem('isLoggedIn') === 'true'
+      });
+      isLoggedIn = result;
+    } catch (err) {
+      console.warn('[MCG Helper] Failed to check login status from tab:', err);
+    }
+
+    if (isLoggedIn) {
+      newBtn.disabled = true;
+      const tooltip = newBtn.querySelector('.qa-tooltip');
+      if (tooltip) {
+        tooltip.textContent = 'Already logged in';
+      }
+    }
+
     newBtn.addEventListener('click', async () => {
       try {
         const url = new URL(tab.url);
-        const isLoginPage = url.pathname.toLowerCase().replace(/\/$/, '') === '/login';
+        const pathname = url.pathname.toLowerCase().replace(/\/$/, '');
+        const isLoginPage = pathname.startsWith('/login') || pathname.endsWith('/login');
         const loginUrl = new URL('/login', tab.url).toString();
 
-        if (isLoginPage) {
+         if (isLoginPage) {
           // If we are already on `/login`, log in directly
           await chrome.scripting.executeScript({
             target: { tabId: tab.id },
@@ -453,7 +474,7 @@ function setupQuickActions(tab) {
             args: ["nick@mycloudgrocer.com", "Password2!"]
           });
         } else {
-          // Otherwise, save the credentials and redirect
+          // Always save credentials to local storage in case the header button triggers navigation
           await chrome.storage.local.set({
             autoLogin: {
               username: "nick@mycloudgrocer.com",
@@ -461,7 +482,24 @@ function setupQuickActions(tab) {
               timestamp: Date.now()
             }
           });
-          await chrome.tabs.update(tab.id, { url: loginUrl });
+
+          // Try to click the header login button first
+          let headerBtnClicked = false;
+          try {
+            const [{ result }] = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              func: clickHeaderLoginAndFill,
+              args: ["nick@mycloudgrocer.com", "Password2!"]
+            });
+            headerBtnClicked = result;
+          } catch (e) {
+            console.warn('[MCG Helper] Failed to check/click header login button:', e);
+          }
+
+          // If the header login button was not found, fallback to redirect
+          if (!headerBtnClicked) {
+            await chrome.tabs.update(tab.id, { url: loginUrl });
+          }
         }
         
         // Close popup to give control back to tab
@@ -703,7 +741,8 @@ function performAutoLoginInPage(username, password) {
   setVal(emailInput, username);
   setVal(passwordInput, password);
 
-  let loginBtn = document.querySelector('button[type="submit"]') ||
+  let loginBtn = document.querySelector('.form-submit-btn[type="submit"]') ||
+                 document.querySelector('button[type="submit"]') ||
                  document.querySelector('input[type="submit"]');
 
   if (!loginBtn) {
@@ -715,7 +754,7 @@ function performAutoLoginInPage(username, password) {
   }
 
   if (loginBtn) {
-    setTimeout(() => { loginBtn.click(); }, 150);
+    setTimeout(() => { loginBtn.click(); }, 15);
   } else {
     const form = emailInput.closest('form');
     if (form) {
@@ -724,4 +763,76 @@ function performAutoLoginInPage(username, password) {
       console.error('[MCG Helper] Submit button/form not found.');
     }
   }
+}
+
+/**
+ * In-page helper to click header login button and poll for credentials fields
+ */
+function clickHeaderLoginAndFill(username, password) {
+  const headerLoginBtn = document.querySelector('.store-main-page-header-content .login-button');
+  if (!headerLoginBtn) return false;
+
+  headerLoginBtn.click();
+
+  let attempts = 0;
+  const interval = setInterval(() => {
+    const emailInput = document.querySelector('input[type="email"]') ||
+                       document.querySelector('input[name="email" i]') ||
+                       document.querySelector('input[id="email" i]') ||
+                       document.querySelector('input[name="username" i]') ||
+                       document.querySelector('input[id="username" i]') ||
+                       document.querySelector('input[name*="email" i]') ||
+                       document.querySelector('input[id*="email" i]') ||
+                       document.querySelector('input[name*="user" i]') ||
+                       document.querySelector('input[id*="user" i]');
+
+    const passwordInput = document.querySelector('input[type="password"]') ||
+                          document.querySelector('input[name="password" i]') ||
+                          document.querySelector('input[id="password" i]') ||
+                          document.querySelector('input[name*="pass" i]') ||
+                          document.querySelector('input[id*="pass" i]');
+
+    if (emailInput && passwordInput) {
+      clearInterval(interval);
+
+      const setVal = (input, val) => {
+        if (!input) return;
+        input.value = val;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        input.dispatchEvent(new Event('blur', { bubbles: true }));
+      };
+
+      setVal(emailInput, username);
+      setVal(passwordInput, password);
+
+      let loginBtn = document.querySelector('.form-submit-btn[type="submit"]') ||
+                     document.querySelector('button[type="submit"]') ||
+                     document.querySelector('input[type="submit"]');
+
+      if (!loginBtn) {
+        const buttons = Array.from(document.querySelectorAll('button, input[type="button"], a, [role="button"]'));
+        loginBtn = buttons.find(btn => {
+          const text = (btn.textContent || btn.value || '').toLowerCase().trim();
+          return text.includes('log in') || text === 'login' || text.includes('sign in') || text === 'signin';
+        });
+      }
+
+      if (loginBtn) {
+        setTimeout(() => { loginBtn.click(); }, 150);
+      } else {
+        const form = emailInput.closest('form');
+        if (form) {
+          setTimeout(() => { form.submit(); }, 150);
+        }
+      }
+    }
+
+    attempts++;
+    if (attempts > 30) {
+      clearInterval(interval);
+    }
+  }, 100);
+
+  return true;
 }
