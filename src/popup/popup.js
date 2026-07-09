@@ -5,6 +5,12 @@
 const API_KEY = window.API_KEY || '';
 const API_BASE = 'https://bugs.mycloudgrocer.com/api';
 
+// Cache for current staging site details and deployments for copying test data table
+let currentStoreName = '';
+let currentStageName = '';
+let currentDeployments = [];
+let currentBuildsCache = {};
+
 document.addEventListener('DOMContentLoaded', async () => {
   // Show version from manifest
   const manifest = chrome.runtime.getManifest();
@@ -40,12 +46,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (stageMatch) {
       const storeName = stageMatch[1];
       const stageName = stageMatch[2];
+      currentStoreName = storeName;
+      currentStageName = stageName;
       
       // Set min-height immediately to prevent Chrome popup clipping bug on async load
       document.body.style.minHeight = '380px';
       
       statusText.textContent = `Loading: ${storeName.toUpperCase()} ${stageName.toUpperCase()}`;
       statusEl.classList.add('active');
+      
+      const quickActionsEl = document.getElementById('quick-actions-section');
+      if (quickActionsEl) {
+        quickActionsEl.style.display = 'flex';
+        setupQuickActions(tab);
+      }
       
       await loadDeployments(storeName, stageName);
       
@@ -247,6 +261,8 @@ async function loadDeployments(storeName, stageName) {
     // 4. Resolve build branches in parallel
     const buildIds = projectDeps.map(dep => dep.buildId).filter(Boolean);
     const resolvedBuildsCache = await resolveBuilds(buildIds);
+    currentDeployments = projectDeps;
+    currentBuildsCache = resolvedBuildsCache;
     
     // 5. Partition deployments
     const priorityDeps = [];
@@ -372,9 +388,14 @@ async function copyToClipboardViaTab(tabId, text) {
 /**
  * Visual feedback on a button
  */
+/**
+ * Visual feedback on a button
+ */
 function showButtonFeedback(btnId, msg) {
   const btn = document.getElementById(btnId);
+  if (!btn) return;
   const span = btn.querySelector('span');
+  if (!span) return;
   const original = span.textContent;
   span.textContent = msg;
   btn.style.background = 'linear-gradient(135deg, #10B981 0%, #059669 100%)';
@@ -382,4 +403,325 @@ function showButtonFeedback(btnId, msg) {
     span.textContent = original;
     btn.style.background = '';
   }, 1500);
+}
+
+/**
+ * Visual feedback on a QA/tooltip action button
+ */
+function showQaButtonFeedback(btnId, msg) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  const tooltip = btn.querySelector('.qa-tooltip');
+  if (!tooltip) return;
+  const original = tooltip.textContent;
+  tooltip.textContent = msg;
+  btn.style.borderColor = '#10B981';
+  btn.style.color = '#10B981';
+  btn.style.background = 'rgba(16, 185, 129, 0.1)';
+  btn.classList.add('force-tooltip');
+  
+  setTimeout(() => {
+    tooltip.textContent = original;
+    btn.style.borderColor = '';
+    btn.style.color = '';
+    btn.style.background = '';
+    btn.classList.remove('force-tooltip');
+  }, 1500);
+}
+
+/**
+ * Setup event listeners for staging page Quick Actions
+ */
+function setupQuickActions(tab) {
+  const btnLogin = document.getElementById('btn-qa-login');
+  if (btnLogin) {
+    // Clone button to strip any pre-existing listeners
+    const newBtn = btnLogin.cloneNode(true);
+    btnLogin.parentNode.replaceChild(newBtn, btnLogin);
+
+    newBtn.addEventListener('click', async () => {
+      try {
+        const url = new URL(tab.url);
+        const isLoginPage = url.pathname.toLowerCase().replace(/\/$/, '') === '/login';
+        const loginUrl = new URL('/login', tab.url).toString();
+
+        if (isLoginPage) {
+          // If we are already on `/login`, log in directly
+          await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: performAutoLoginInPage,
+            args: ["nick@mycloudgrocer.com", "Password2!"]
+          });
+        } else {
+          // Otherwise, save the credentials and redirect
+          await chrome.storage.local.set({
+            autoLogin: {
+              username: "nick@mycloudgrocer.com",
+              password: "Password2!",
+              timestamp: Date.now()
+            }
+          });
+          await chrome.tabs.update(tab.id, { url: loginUrl });
+        }
+        
+        // Close popup to give control back to tab
+        window.close();
+      } catch (err) {
+        console.error('[MCG Helper] Quick Actions Login failed:', err);
+      }
+    });
+  }
+
+  const btnCopyTable = document.getElementById('btn-qa-copy-table');
+  if (btnCopyTable) {
+    const newBtn = btnCopyTable.cloneNode(true);
+    btnCopyTable.parentNode.replaceChild(newBtn, btnCopyTable);
+
+    newBtn.addEventListener('click', async () => {
+      try {
+        // 1. Get client specs from page context
+        let clientSpecs = {
+          os: 'Windows 11 x64',
+          browser: 'Google Chrome',
+          resolution: '1920x1080',
+          device: 'Laptop',
+          model: 'PC / Laptop'
+        };
+        
+        try {
+          const [{ result }] = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            func: () => {
+              const getOS = () => {
+                const ua = navigator.userAgent;
+                let os = 'Windows 11';
+                if (ua.indexOf('Macintosh') !== -1) os = 'macOS';
+                else if (ua.indexOf('Linux') !== -1) os = 'Linux';
+                
+                let arch = '';
+                if (ua.indexOf('x86_64') !== -1 || ua.indexOf('Win64') !== -1 || ua.indexOf('WOW64') !== -1) {
+                  arch = ' x64';
+                } else if (ua.indexOf('arm64') !== -1 || ua.indexOf('ARM64') !== -1) {
+                  arch = ' ARM64';
+                }
+                return os + arch;
+              };
+
+              const getBrowser = () => {
+                const ua = navigator.userAgent;
+                if (ua.indexOf('Firefox') !== -1) return 'Mozilla Firefox';
+                if (ua.indexOf('Edg') !== -1) return 'Microsoft Edge';
+                if (ua.indexOf('Chrome') !== -1) return 'Google Chrome';
+                if (ua.indexOf('Safari') !== -1) return 'Apple Safari';
+                return 'Google Chrome';
+              };
+
+              const getDeviceModel = () => {
+                const ua = navigator.userAgent;
+                if (/Macintosh/i.test(ua)) return 'MacBook';
+                return 'PC / Laptop';
+              };
+
+              return {
+                os: getOS(),
+                browser: getBrowser(),
+                resolution: `${window.screen.width}x${window.screen.height}`,
+                device: 'Laptop',
+                model: getDeviceModel() === 'MacBook' ? 'MacBook' : 'PC / Laptop'
+              };
+            }
+          });
+          if (result) clientSpecs = result;
+        } catch (e) {
+          console.warn('Failed to execute client spec script, falling back to defaults', e);
+        }
+
+        // 2. Get zoom factor
+        let zoom = '100%';
+        try {
+          const zoomFactor = await chrome.tabs.getZoom(tab.id);
+          zoom = `${Math.round(zoomFactor * 100)}%`;
+        } catch (e) {
+          console.warn('Failed to get zoom level, using default 100%', e);
+        }
+
+        // 3. Resolve front-end and back-end branches from cache
+        const findProjectData = (keywords) => {
+          if (!currentDeployments || currentDeployments.length === 0) {
+            return { branch: '', build: '' };
+          }
+          const dep = currentDeployments.find(d => {
+            const name = (d.project || '').toUpperCase();
+            return keywords.some(k => name.includes(k));
+          });
+          if (!dep) return { branch: '', build: '' };
+          const buildInfo = currentBuildsCache[dep.buildId] || {};
+          return {
+            branch: buildInfo.gitBranch || '',
+            build: buildInfo.buildNumber ? String(buildInfo.buildNumber) : ''
+          };
+        };
+
+        const frontend = findProjectData(['REACT', 'FRONT']);
+        const backend = findProjectData(['WEB', 'API', 'BACK']);
+
+        const storeNameUpper = (currentStoreName || '').toUpperCase();
+        const stageNameUpper = (currentStageName || '').toUpperCase();
+
+        // 4. Generate HTML table matching the user's structure and styles
+        const htmlTable = `<table baot="1" border="1" cellpadding="0" cellspacing="0" dir="ltr" root="1" xmlns="http://www.w3.org/1999/xhtml" style="color: rgb(34, 34, 34); font-style: normal; font-variant-ligatures: normal; font-variant-caps: normal; font-weight: 400; letter-spacing: normal; orphans: 2; text-align: start; text-transform: none; widows: 2; word-spacing: 0px; -webkit-text-stroke-width: 0px; white-space: normal; text-decoration-thickness: initial; text-decoration-style: initial; text-decoration-color: initial; table-layout: fixed; font-size: 10pt; font-family: Arial; width: 0px; border-collapse: collapse; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial;">
+  <colgroup>
+    <col width="48">
+    <col width="25">
+    <col width="155">
+    <col width="244">
+    <col width="150">
+    <col width="328">
+  </colgroup>
+  <tbody>
+    <tr style="height: 25px;">
+      <td colspan="1" rowspan="7" style="border: 1px solid rgb(183, 183, 183); overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(239, 239, 239); font-family: 'Times New Roman'; font-size: 14pt; font-weight: bold; color: rgb(234, 153, 153); text-align: center;">
+        <div style="max-height: 458px;"><span></span></div>
+      </td>
+      <td colspan="5" rowspan="1" style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(239, 239, 239); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">Environment:</td>
+    </tr>
+    <tr style="height: 25px;">
+      <td colspan="2" rowspan="1" style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(239, 239, 239); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">Device</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">${clientSpecs.device}</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(239, 239, 239); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">Store</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: bottom; background-color: rgb(255, 255, 255); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">${storeNameUpper}</td>
+    </tr>
+    <tr style="height: 25px;">
+      <td colspan="2" rowspan="1" style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(239, 239, 239); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">Model</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">${clientSpecs.model}</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(239, 239, 239); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">Server</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: bottom; background-color: rgb(255, 255, 255); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">${stageNameUpper}</td>
+    </tr>
+    <tr style="height: 25px;">
+      <td colspan="2" rowspan="1" style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(239, 239, 239); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">OS</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(255, 255, 255); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">${clientSpecs.os}</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(239, 239, 239); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">Back-end branch</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: bottom; background-color: rgb(255, 255, 255); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">${backend.branch}</td>
+    </tr>
+    <tr style="height: 25px;">
+      <td colspan="2" rowspan="1" style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(239, 239, 239); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">Resolution</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(255, 255, 255); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">${clientSpecs.resolution}</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(239, 239, 239); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">BE Build number</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(255, 255, 255); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">${backend.build}</td>
+    </tr>
+    <tr style="height: 25px;">
+      <td colspan="2" rowspan="1" style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(239, 239, 239); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">Browser</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(255, 255, 255); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">${clientSpecs.browser}</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(239, 239, 239); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">Front-end branch</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: bottom; background-color: rgb(255, 255, 255); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">${frontend.branch}</td>
+    </tr>
+    <tr style="height: 25px;">
+      <td colspan="2" rowspan="1" style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(239, 239, 239); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">Page Zoom</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">${zoom}</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(239, 239, 239); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">Front-end number</td>
+      <td style="border-width: 1px; border-style: solid; border-color: rgb(204, 204, 204) rgb(183, 183, 183) rgb(183, 183, 183) rgb(204, 204, 204); border-image: initial; overflow: hidden; padding: 2px 3px; vertical-align: middle; background-color: rgb(255, 255, 255); font-family: 'Times New Roman'; font-size: 14pt; font-weight: normal;">${frontend.build}</td>
+    </tr>
+  </tbody>
+</table>`;
+
+        // 5. Generate TSV representation for text/plain fallback
+        const tsvData = [
+          `\tEnvironment:\t\t\t\t`,
+          `\tDevice\t${clientSpecs.device}\tStore\t${storeNameUpper}\t`,
+          `\tModel\t${clientSpecs.model}\tServer\t${stageNameUpper}\t`,
+          `\tOS\t${clientSpecs.os}\tBack-end branch\t${backend.branch}\t`,
+          `\tResolution\t${clientSpecs.resolution}\tBE Build number\t${backend.build}\t`,
+          `\tBrowser\t${clientSpecs.browser}\tFront-end branch\t${frontend.branch}\t`,
+          `\tPage Zoom\t${zoom}\tFront-end number\t${frontend.build}\t`
+        ].join('\n');
+
+        // 6. Write to clipboard using active tab context
+        await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: (html, text) => {
+            try {
+              const blobHtml = new Blob([html], { type: 'text/html' });
+              const blobText = new Blob([text], { type: 'text/plain' });
+              const item = new ClipboardItem({
+                'text/html': blobHtml,
+                'text/plain': blobText
+              });
+              navigator.clipboard.write([item]).catch(err => {
+                console.error('[MCG Helper] Failed to copy formatted table via ClipboardItem:', err);
+                navigator.clipboard.writeText(text);
+              });
+            } catch (err) {
+              console.error('[MCG Helper] Error writing to clipboard inside tab:', err);
+            }
+          },
+          args: [htmlTable, tsvData]
+        });
+
+        // 7. Show success feedback
+        showQaButtonFeedback('btn-qa-copy-table', 'Copied!');
+      } catch (err) {
+        console.error('[MCG Helper] Copy table failed:', err);
+        showQaButtonFeedback('btn-qa-copy-table', 'Error!');
+      }
+    });
+  }
+}
+
+/**
+ * Self-contained auto-login script to be injected via chrome.scripting.executeScript
+ */
+function performAutoLoginInPage(username, password) {
+  function setVal(input, val) {
+    if (!input) return;
+    input.value = val;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    input.dispatchEvent(new Event('blur', { bubbles: true }));
+  }
+
+  const emailInput = document.querySelector('input[type="email"]') ||
+                     document.querySelector('input[name="email" i]') ||
+                     document.querySelector('input[id="email" i]') ||
+                     document.querySelector('input[name="username" i]') ||
+                     document.querySelector('input[id="username" i]') ||
+                     document.querySelector('input[name*="email" i]') ||
+                     document.querySelector('input[id*="email" i]') ||
+                     document.querySelector('input[name*="user" i]') ||
+                     document.querySelector('input[id*="user" i]');
+
+  const passwordInput = document.querySelector('input[type="password"]') ||
+                        document.querySelector('input[name="password" i]') ||
+                        document.querySelector('input[id="password" i]') ||
+                        document.querySelector('input[name*="pass" i]') ||
+                        document.querySelector('input[id*="pass" i]');
+
+  if (!emailInput || !passwordInput) {
+    console.error('[MCG Helper] Input elements not found.');
+    return;
+  }
+
+  setVal(emailInput, username);
+  setVal(passwordInput, password);
+
+  let loginBtn = document.querySelector('button[type="submit"]') ||
+                 document.querySelector('input[type="submit"]');
+
+  if (!loginBtn) {
+    const buttons = Array.from(document.querySelectorAll('button, input[type="button"], a, [role="button"]'));
+    loginBtn = buttons.find(btn => {
+      const text = (btn.textContent || btn.value || '').toLowerCase().trim();
+      return text.includes('log in') || text === 'login' || text.includes('sign in') || text === 'signin';
+    });
+  }
+
+  if (loginBtn) {
+    setTimeout(() => { loginBtn.click(); }, 150);
+  } else {
+    const form = emailInput.closest('form');
+    if (form) {
+      setTimeout(() => { form.submit(); }, 150);
+    } else {
+      console.error('[MCG Helper] Submit button/form not found.');
+    }
+  }
 }

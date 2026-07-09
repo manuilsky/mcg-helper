@@ -15,6 +15,59 @@
     close: '<path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>',
   };
 
+  // ── Production Sites Mapping ──────────────────────────────────
+  const PROD_MAP = {
+    'a661': 'https://six60one.com/',
+    'a9': 'https://aisle9market.com/',
+    'allf': 'https://allfreshsupermarket.com/',
+    'bayk': 'https://baykosher.com/',
+    'bb': 'https://breadberry.com/',
+    'butch': 'https://butcherie.com/',
+    'butchc': 'https://butcherie.com/',
+    'canyon': 'https://thekoshercanyon.shop/',
+    'cd': 'https://shop.crowndrugs.com/',
+    'certo': 'https://certomarket.com/',
+    'chbutch': 'https://chbutcher.com/',
+    'emp': 'https://empirekoshersupermarket.com/',
+    'food': 'https://shop.westorangefooderie.com/',
+    'ge': 'https://shop.grandandessex.com/',
+    'gf': 'https://galasupermarkets.com/',
+    'hog': 'https://thehouseofglatt.com/',
+    'hok': 'https://houseofkosher.com/',
+    'honey': 'https://honeydewsupermarket.com/',
+    'iko': 'https://islandkosher.shop/',
+    'kc': 'https://koshercentral.com/',
+    'kf': 'https://kosherfamily.com/',
+    'king': 'https://kosherkingdom.com/',
+    'kowe': 'https://kosherwest.com/',
+    'ktown': 'https://koshertown.com/',
+    'lan': 'https://landauskj.com/',
+    'lanbp': 'https://landausmarket.com/',
+    'mada': 'https://madanim.com/',
+    'meat': 'https://meatmaven.com/',
+    'mega': 'https://mega53market.com/',
+    'meha': 'https://mehudar.ca/',
+    'mf': 'https://shopmountainfruit.com/',
+    'mm': 'https://marketmavenmd.com/',
+    'moti': 'https://motismarket.com/',
+    'nutmeg': 'https://nutmegkoshermarket.com/',
+    'ref': 'https://refreshfruits.com/',
+    'rk': 'https://rocklandkosher.com/',
+    'rose': 'https://rosemarykosher.com/',
+    'sara': 'https://sarahstentkoshermarket.com/',
+    'sea': 'https://seattlekosher.com/',
+    'shau': 'https://shaulysmeat.com/',
+    'shlo': 'https://shlomoskosher.com/',
+    'shoppe': 'https://theshoppeli.com/',
+    'sk': 'https://seasonskosher.com/',
+    'skop': 'https://skoppssupermarket.com/',
+    'ss': 'https://superstopnj.com/',
+    'was': 'https://wassermansupermarket.com/',
+    'wk': 'https://westernkosher.com/ap',
+    'yes': 'https://yesmarketmiami.com/',
+    'zipk': 'https://zipkosher.com/'
+  };
+
   // ── Only run on task pages ───────────────────────────────────
   if (!MCGUtils.isTaskPage()) {
     console.log('[MCG Helper] Not a task page, skipping toolbar injection.');
@@ -106,10 +159,6 @@
     return `${prefix}${digits}${suffix}`;
   }
 
-  const sprintField = document.getElementById('Sprint');
-  const sprintRaw = sprintField ? sprintField.value.trim() : '';
-  const sprintNormalized = normalizeSprint(sprintRaw);
-
   const btnCreatePR = createButton(
     'Create PR',
     prIcon,
@@ -134,7 +183,8 @@
 
   console.log('[MCG Helper] Toolbar injected successfully.');
 
-  // ── Build Verification Logic ────────────────────────────────
+  // ── Build Verification and Table Features Injection ────────────────
+  const buildIdCache = {};
 
   function normalizeBranch(br) {
     if (!br) return '';
@@ -254,6 +304,159 @@
     return null;
   }
 
+  async function resolveBuildId(isBackend, branchName, buildStr) {
+    const cacheKey = `${isBackend}:${branchName || ''}:${buildStr}`;
+    if (buildIdCache[cacheKey] !== undefined) {
+      return buildIdCache[cacheKey];
+    }
+
+    const promise = (async () => {
+      try {
+        const { apiKey } = await chrome.storage.local.get('apiKey');
+        const apiToken = apiKey || window.API_KEY || '';
+        if (!apiToken) return null;
+
+        // Parse build number
+        const parts = buildStr.trim().split('.');
+        let buildNumber = 0;
+        let buildNumberMinor = 0;
+
+        if (parts.length >= 4) {
+          buildNumber = parseInt(parts[parts.length - 1], 10) || 0;
+          buildNumberMinor = parseInt(parts[1], 10) || 0;
+        } else if (parts.length === 2) {
+          buildNumber = parseInt(parts[1], 10) || 0;
+          buildNumberMinor = parseInt(parts[0], 10) || 0;
+        } else {
+          buildNumber = parseInt(parts[parts.length - 1], 10) || 0;
+          buildNumberMinor = 0;
+        }
+
+        const branchCandidates = branchName ? [
+          branchName.trim(),
+          branchName.trim().replace(/-/g, '/'),
+          branchName.trim().replace(/\//g, '-')
+        ] : [];
+
+        const project = isBackend ? 'web' : 'react';
+        let matchedBuild = null;
+
+        // Query branch candidates
+        for (const br of [...new Set(branchCandidates)]) {
+          try {
+            const buildUrl = `https://bugs.mycloudgrocer.com/api/builds?project=${encodeURIComponent(project)}&branch=${encodeURIComponent(br)}&pageSize=100`;
+            const res = await fetch(buildUrl, {
+              headers: {
+                'X-Api-Key': apiToken,
+                'Accept': 'application/json'
+              }
+            });
+            if (res.ok) {
+              const builds = await res.json();
+              const found = builds.find(b => b.buildNumber === buildNumber && b.buildNumberMinor === buildNumberMinor);
+              if (found) {
+                matchedBuild = found;
+                break;
+              }
+            }
+          } catch (err) {
+            console.warn(`Failed fetching builds for branch ${br}`, err);
+          }
+        }
+
+        // Fallback query
+        if (!matchedBuild) {
+          try {
+            const buildUrl = `https://bugs.mycloudgrocer.com/api/builds?project=${encodeURIComponent(project)}&pageSize=100`;
+            const res = await fetch(buildUrl, {
+              headers: {
+                'X-Api-Key': apiToken,
+                'Accept': 'application/json'
+              }
+            });
+            if (res.ok) {
+              const builds = await res.json();
+              matchedBuild = builds.find(b => b.buildNumber === buildNumber && b.buildNumberMinor === buildNumberMinor);
+            }
+          } catch (err) {
+            console.warn(`Failed fallback builds query`, err);
+          }
+        }
+
+        if (matchedBuild) {
+          return matchedBuild.id !== undefined ? matchedBuild.id : matchedBuild.Id;
+        }
+      } catch (err) {
+        console.warn('resolveBuildId error', err);
+      }
+      return null;
+    })();
+
+    buildIdCache[cacheKey] = promise;
+    return promise;
+  }
+
+  function initBuildNumberLink(buildCell, isBackend, branchName, buildStr) {
+    if (!buildCell || !buildStr) return;
+    if (buildCell.querySelector('.mcg-build-link')) return;
+
+    const link = document.createElement('a');
+    link.href = 'javascript:void(0)';
+    link.textContent = buildStr;
+    link.className = 'mcg-build-link mcg-build-link--clickable';
+
+    const handleBuildClick = async (e) => {
+      // Only allow left click (button 0) for 'click' event, and middle click (button 1) for 'auxclick' event
+      if (e.type === 'click' && e.button !== 0) return;
+      if (e.type === 'auxclick' && e.button !== 1) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (link.classList.contains('mcg-build-link--loading')) return;
+
+      if (link.dataset.buildId) {
+        window.open(`/monitor/deployments.aspx?BuildId=${link.dataset.buildId}`, '_blank');
+        return;
+      }
+
+      link.classList.add('mcg-build-link--loading');
+
+      try {
+        const buildId = await resolveBuildId(isBackend, branchName, buildStr);
+        if (buildId) {
+          link.dataset.buildId = buildId;
+          link.href = `/monitor/deployments.aspx?BuildId=${buildId}`;
+          link.classList.remove('mcg-build-link--clickable');
+          window.open(link.href, '_blank');
+        } else {
+          const { apiKey } = await chrome.storage.local.get('apiKey');
+          if (!apiKey && !window.API_KEY) {
+            MCGUtils.showToast('API Key missing. Please configure it in popup.', 'error', 5000, 'left');
+          } else {
+            MCGUtils.showToast(`Build ${buildStr} was not found in the database.`, 'error', 5000, 'left');
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        MCGUtils.showToast(`Failed to resolve build ID: ${err.message}`, 'error', 5000, 'left');
+      } finally {
+        link.classList.remove('mcg-build-link--loading');
+      }
+    };
+
+    link.addEventListener('click', handleBuildClick);
+    link.addEventListener('auxclick', handleBuildClick);
+
+    Array.from(buildCell.childNodes).forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        node.remove();
+      }
+    });
+
+    buildCell.insertBefore(link, buildCell.firstChild);
+  }
+
   async function checkBuildFix(btn, isBackend, branchName, buildStr, table) {
     btn.classList.add('mcg-check-build-btn--loading');
     btn.classList.remove('mcg-check-build-btn--success', 'mcg-check-build-btn--error');
@@ -278,25 +481,52 @@
 
       const currentTaskId = MCGUtils.getTaskId();
 
-      // ── Step 1: Parse build string ───────────────────
+      // ── Parse build string ──
       const parts = buildStr.trim().split('.');
-      const buildNumberMinor = parts.length > 1 ? parseInt(parts[0], 10) : 0;
-      const buildNumber = parts.length > 0 ? parseInt(parts[parts.length - 1], 10) : 0;
+      let buildNumber = 0;
+      let buildNumberMinor = 0;
 
-      // ── Step 2: Query builds from DB first ────────────
-      // This allows us to resolve the build link immediately
+      if (parts.length >= 4) {
+        buildNumber = parseInt(parts[parts.length - 1], 10) || 0;
+        buildNumberMinor = parseInt(parts[1], 10) || 0;
+      } else if (parts.length === 2) {
+        buildNumber = parseInt(parts[1], 10) || 0;
+        buildNumberMinor = parseInt(parts[0], 10) || 0;
+      } else {
+        buildNumber = parseInt(parts[parts.length - 1], 10) || 0;
+        buildNumberMinor = 0;
+      }
+
+      // ── Query builds from DB first ──
       const branchCandidates = [
         branchName.trim(),
         branchName.trim().replace(/-/g, '/'),
         branchName.trim().replace(/\//g, '-')
       ];
 
-      // Since we don't have merges yet, project name defaults to web or react
       const project = isBackend ? 'web' : 'react';
 
       let matchedBuild = null;
-      if (apiToken) {
-        // Query builds using candidates
+      
+      // Try to get build by ID from the link first if already resolved/cached
+      const buildLink = btn.parentElement ? btn.parentElement.querySelector('.mcg-build-link') : null;
+      if (buildLink && buildLink.dataset.buildId && apiToken) {
+        try {
+          const res = await fetch(`https://bugs.mycloudgrocer.com/api/builds/${buildLink.dataset.buildId}`, {
+            headers: {
+              'X-Api-Key': apiToken,
+              'Accept': 'application/json'
+            }
+          });
+          if (res.ok) {
+            matchedBuild = await res.json();
+          }
+        } catch (err) {
+          console.warn(`Failed fetching build details for ID ${buildLink.dataset.buildId}`, err);
+        }
+      }
+
+      if (!matchedBuild && apiToken) {
         for (const br of [...new Set(branchCandidates)]) {
           try {
             const buildUrl = `https://bugs.mycloudgrocer.com/api/builds?project=${encodeURIComponent(project)}&branch=${encodeURIComponent(br)}&pageSize=100`;
@@ -319,7 +549,6 @@
           }
         }
 
-        // Fallback: search latest 100 builds for project
         if (!matchedBuild) {
           try {
             const buildUrl = `https://bugs.mycloudgrocer.com/api/builds?project=${encodeURIComponent(project)}&pageSize=100`;
@@ -340,7 +569,6 @@
       }
 
       if (!matchedBuild) {
-        // If apiToken is missing or build is not found, we can't get build start time
         if (!apiToken) {
           MCGUtils.showToast('API Key missing. Cannot fetch build details from database. Please configure it in popup.', 'error', 5000, 'left');
         } else {
@@ -351,25 +579,28 @@
         return;
       }
 
-      // Wrap the build number in a link to its deployments/build page
+      // Wrap the build number in a link
       const buildCell = btn.parentElement;
       if (buildCell) {
         const buildId = matchedBuild.id !== undefined ? matchedBuild.id : matchedBuild.Id;
-        if (buildId && !buildCell.querySelector('.mcg-build-link')) {
+        const existingLink = buildCell.querySelector('.mcg-build-link');
+        if (existingLink) {
+          existingLink.dataset.buildId = buildId;
+          existingLink.href = `/monitor/deployments.aspx?BuildId=${buildId}`;
+          existingLink.classList.remove('mcg-build-link--clickable');
+        } else {
           const link = document.createElement('a');
           link.href = `/monitor/deployments.aspx?BuildId=${buildId}`;
           link.target = '_blank';
           link.textContent = buildStr;
           link.className = 'mcg-build-link';
           
-          // Remove text nodes in buildCell to avoid duplicate text
           Array.from(buildCell.childNodes).forEach(node => {
             if (node.nodeType === Node.TEXT_NODE) {
               node.remove();
             }
           });
           
-          // Insert link at the beginning
           buildCell.insertBefore(link, buildCell.firstChild);
         }
       }
@@ -379,7 +610,6 @@
       let mergeSource = '';
       let detectedSprintBranch = null;
 
-      // ── TIER 1: Query API Merges History ───────────────────
       if (apiToken) {
         try {
           const mergesUrl = `https://bugs.mycloudgrocer.com/api/merges/bug/${currentTaskId}`;
@@ -416,7 +646,6 @@
         }
       }
 
-      // ── TIER 2: Query API Bug Details (Column SprintBranchMergedOnUtc) ─
       if (!mergeTime && apiToken) {
         try {
           const bugUrl = `https://bugs.mycloudgrocer.com/api/bugs/${currentTaskId}`;
@@ -436,12 +665,11 @@
               const normalizedBugBranch = normalizeBranch(sprintBranchField);
               const normalizedTargetBranch = normalizeBranch(branchName);
 
-              // check if it includes target branch and matches project type
               const isBugBE = isBackendProject(sprintBranchField);
               if (normalizedBugBranch.includes(normalizedTargetBranch) && (isBackend === isBugBE)) {
                 mergeTime = new Date(sprintBranchMergedOnUtcField);
                 mergeSource = 'API task details';
-                detectedSprintBranch = sprintBranchField.split(' ')[0]; // Extract branch from e.g. "sprint/rs34.2 repo"
+                detectedSprintBranch = sprintBranchField.split(' ')[0];
                 console.log(`[MCG Helper] Found merge time via Tier 2 (API bug details): ${mergeTime} (source: ${mergeSource})`);
               }
             }
@@ -451,7 +679,6 @@
         }
       }
 
-      // ── TIER 3: Scrape Comments from DOM ───────────────────
       if (!mergeTime) {
         const domMergeTime = getMergeTimeFromDOM(isBackend, branchName);
         if (domMergeTime) {
@@ -474,11 +701,9 @@
         return;
       }
 
-      // ── Step 4: Verify times ───────────────────────────
       const buildTime = new Date(matchedBuild.startedOnUtc);
       const isIncluded = buildTime > mergeTime;
 
-      // Warn if build is on a different branch
       const normalizedTargetBranch = normalizeBranch(branchName);
       const normalizedBuildBranch = normalizeBranch(matchedBuild.gitBranch);
       const branchMatches = normalizedBuildBranch === normalizedTargetBranch;
@@ -488,7 +713,6 @@
         branchWarning = `\n⚠️ Build is on branch ${matchedBuild.gitBranch}, but table says ${branchName}!`;
       }
 
-      // Check if comment was created before merge
       let commentWarning = '';
       const commentTime = getCommentTime(table);
       if (commentTime && mergeTime && commentTime < mergeTime) {
@@ -553,6 +777,16 @@
     return t === 'be build number' || t === 'back end number' || t === 'be number' || t === 'be build' || t === 'back end build';
   }
 
+  function isStoreKey(text) {
+    const t = normalizeKey(text);
+    return t === 'store';
+  }
+
+  function isServerKey(text) {
+    const t = normalizeKey(text);
+    return t === 'server';
+  }
+
   function createCheckButton(onClick) {
     const btn = document.createElement('button');
     btn.className = 'mcg-check-build-btn';
@@ -571,6 +805,15 @@
     return btn;
   }
 
+  function getBuildValFromCell(cell) {
+    if (!cell) return null;
+    const link = cell.querySelector('.mcg-build-link');
+    if (link) return link.textContent.trim();
+    const cloned = cell.cloneNode(true);
+    cloned.querySelectorAll('button, a, script, style').forEach(el => el.remove());
+    return cloned.textContent.trim();
+  }
+
   function debounce(func, wait) {
     let timeout;
     return function(...args) {
@@ -579,20 +822,30 @@
     };
   }
 
-  function injectCheckButtons() {
+  function injectTableFeatures() {
     const tables = document.querySelectorAll('table');
     
     tables.forEach(table => {
       const cells = Array.from(table.querySelectorAll('td, th'));
       
+      let storeValCell = null;
+      let serverValCell = null;
+
       for (let i = 0; i < cells.length; i++) {
         const cellText = cells[i].textContent.trim();
         
-        // 1. BE Build cell detection
+        // --- Detect Store and Server for Staging links ---
+        if (isStoreKey(cellText)) {
+          storeValCell = cells[i].nextElementSibling;
+        } else if (isServerKey(cellText)) {
+          serverValCell = cells[i].nextElementSibling;
+        }
+
+        // --- Detect BE Build and wrap/inject button ---
         if (isBEBuildKey(cellText)) {
           const buildCell = cells[i].nextElementSibling;
-          const buildVal = buildCell ? buildCell.textContent.trim() : null;
-          if (buildVal && !buildCell.querySelector('.mcg-check-build-btn')) {
+          const buildVal = getBuildValFromCell(buildCell);
+          if (buildVal) {
             // Find closest preceding BE Branch key
             let branchVal = null;
             for (let j = i - 1; j >= 0; j--) {
@@ -602,19 +855,25 @@
                 break;
               }
             }
-            
-            const btn = createCheckButton(() => {
-              checkBuildFix(btn, true, branchVal, buildVal, table);
-            });
-            buildCell.appendChild(btn);
+
+            // 1. Initialize clickable build number link
+            initBuildNumberLink(buildCell, true, branchVal, buildVal);
+
+            // 2. Inject check button if not already present
+            if (!buildCell.querySelector('.mcg-check-build-btn')) {
+              const btn = createCheckButton(() => {
+                checkBuildFix(btn, true, branchVal, buildVal, table);
+              });
+              buildCell.appendChild(btn);
+            }
           }
         }
-        
-        // 2. FE Build cell detection
+
+        // --- Detect FE Build and wrap/inject button ---
         if (isFEBuildKey(cellText)) {
           const buildCell = cells[i].nextElementSibling;
-          const buildVal = buildCell ? buildCell.textContent.trim() : null;
-          if (buildVal && !buildCell.querySelector('.mcg-check-build-btn')) {
+          const buildVal = getBuildValFromCell(buildCell);
+          if (buildVal) {
             // Find closest preceding FE Branch key
             let branchVal = null;
             for (let j = i - 1; j >= 0; j--) {
@@ -624,21 +883,68 @@
                 break;
               }
             }
-            
-            const btn = createCheckButton(() => {
-              checkBuildFix(btn, false, branchVal, buildVal, table);
-            });
-            buildCell.appendChild(btn);
+
+            // 1. Initialize clickable build number link
+            initBuildNumberLink(buildCell, false, branchVal, buildVal);
+
+            // 2. Inject check button if not already present
+            if (!buildCell.querySelector('.mcg-check-build-btn')) {
+              const btn = createCheckButton(() => {
+                checkBuildFix(btn, false, branchVal, buildVal, table);
+              });
+              buildCell.appendChild(btn);
+            }
+          }
+        }
+      }
+
+      // --- Inject stage links if store and server values are present ---
+      if (storeValCell && serverValCell) {
+        const storeVal = storeValCell.textContent.trim();
+        const serverVal = serverValCell.textContent.trim();
+        if (storeVal && serverVal) {
+          let stageUrl;
+          if (serverVal.toLowerCase() === 'prod') {
+            const storeKey = storeVal.toLowerCase();
+            if (PROD_MAP[storeKey]) {
+              stageUrl = PROD_MAP[storeKey];
+            } else {
+              stageUrl = `https://${storeVal.toLowerCase()}.prod.mycloudgrocer.com`;
+            }
+          } else {
+            stageUrl = `https://${storeVal.toLowerCase()}.${serverVal.toLowerCase()}.mycloudgrocer.com`;
+          }
+          
+          if (!storeValCell.querySelector('a')) {
+            const link = document.createElement('a');
+            link.href = stageUrl;
+            link.target = '_blank';
+            link.className = 'mcg-stage-link';
+            while (storeValCell.firstChild) {
+              link.appendChild(storeValCell.firstChild);
+            }
+            storeValCell.appendChild(link);
+          }
+          
+          if (!serverValCell.querySelector('a')) {
+            const link = document.createElement('a');
+            link.href = stageUrl;
+            link.target = '_blank';
+            link.className = 'mcg-stage-link';
+            while (serverValCell.firstChild) {
+              link.appendChild(serverValCell.firstChild);
+            }
+            serverValCell.appendChild(link);
           }
         }
       }
     });
   }
 
-  const debouncedInject = debounce(injectCheckButtons, 100);
+  const debouncedInject = debounce(injectTableFeatures, 100);
 
   // Run instantly on load
-  injectCheckButtons();
+  injectTableFeatures();
 
   // MutationObserver to capture dynamically rendered tables in posts/comments
   const observer = new MutationObserver(() => {
@@ -649,4 +955,3 @@
     subtree: true
   });
 })();
-

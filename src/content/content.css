@@ -218,6 +218,40 @@ img {
   box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3);
 }
 
+
+
+/* --- Stage and Build number hyperlinks --- */
+.mcg-stage-link,
+.mcg-build-link {
+  color: rgb(17, 85, 204) !important; /* Blue color matching the table style */
+  text-decoration: underline !important;
+}
+
+.mcg-build-link--clickable {
+  cursor: pointer !important;
+}
+
+.mcg-build-link--loading {
+  opacity: 0.6;
+  cursor: wait !important;
+  pointer-events: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mcg-build-link--loading::after {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgb(17, 85, 204);
+  border-radius: 50%;
+  border-top-color: transparent;
+  animation: mcg-spin 0.8s linear infinite;
+}
+
 /* ---------- Check Build Button ---------- */
 .mcg-check-build-btn {
   display: inline-flex;
@@ -273,21 +307,4 @@ img {
 
 .mcg-check-build-btn--info {
   color: #3B82F6 !important;
-}
-
-/* --- Build number hyperlink --- */
-.mcg-build-link {
-  color: #4F46E5 !important; /* Premium Indigo */
-  text-decoration: none !important;
-  border-bottom: 1px dashed #4F46E5;
-  font-weight: 600 !important;
-  transition: all 0.2s ease;
-  padding: 1px 2px;
-}
-
-.mcg-build-link:hover {
-  color: #312E81 !important; /* Dark Indigo */
-  border-bottom: 1px solid #312E81;
-  background-color: rgba(79, 70, 229, 0.05);
-  border-radius: 4px;
 }
