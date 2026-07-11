@@ -461,7 +461,8 @@ body {
 }
 
 /* Align the first button's tooltip to the left to prevent clipping at the window edge */
-.quick-actions-list .qa-btn:first-child .qa-tooltip {
+.quick-actions-list .qa-btn:first-child .qa-tooltip,
+.stages-list .stage-btn:first-child .qa-tooltip {
   left: 0;
   transform: translateY(-6px);
 }
@@ -471,8 +472,14 @@ body {
   left: 18px;
 }
 
+.stages-list .stage-btn:first-child .qa-tooltip::after,
+.stages-list .stage-btn:first-child .qa-tooltip::before {
+  left: 20px;
+}
+
 .quick-actions-list .qa-btn:first-child:hover .qa-tooltip,
-.quick-actions-list .qa-btn:first-child.force-tooltip .qa-tooltip {
+.quick-actions-list .qa-btn:first-child.force-tooltip .qa-tooltip,
+.stages-list .stage-btn:first-child:hover .qa-tooltip {
   transform: translateY(-8px);
 }
 
