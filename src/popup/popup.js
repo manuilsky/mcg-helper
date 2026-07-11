@@ -5,11 +5,176 @@
 const API_KEY = window.API_KEY || '';
 const API_BASE = 'https://bugs.mycloudgrocer.com/api';
 
+// ── Production Sites Mapping ──────────────────────────────────
+const PROD_MAP = {
+  'a661': 'https://six60one.com/',
+  'a9': 'https://aisle9market.com/',
+  'allf': 'https://allfreshsupermarket.com/',
+  'bayk': 'https://baykosher.com/',
+  'bb': 'https://breadberry.com/',
+  'butch': 'https://butcherie.com/',
+  'butchc': 'https://butcherie.com/',
+  'canyon': 'https://thekoshercanyon.shop/',
+  'cd': 'https://shop.crowndrugs.com/',
+  'certo': 'https://certomarket.com/',
+  'chbutch': 'https://chbutcher.com/',
+  'emp': 'https://empirekoshersupermarket.com/',
+  'food': 'https://shop.westorangefooderie.com/',
+  'ge': 'https://shop.grandandessex.com/',
+  'gf': 'https://galasupermarkets.com/',
+  'hog': 'https://thehouseofglatt.com/',
+  'hok': 'https://houseofkosher.com/',
+  'honey': 'https://honeydewsupermarket.com/',
+  'iko': 'https://islandkosher.shop/',
+  'kc': 'https://koshercentral.com/',
+  'kf': 'https://kosherfamily.com/',
+  'king': 'https://kosherkingdom.com/',
+  'kowe': 'https://kosherwest.com/',
+  'ktown': 'https://koshertown.com/',
+  'lan': 'https://landauskj.com/',
+  'lanbp': 'https://landausmarket.com/',
+  'mada': 'https://madanim.com/',
+  'meat': 'https://meatmaven.com/',
+  'mega': 'https://mega53market.com/',
+  'meha': 'https://mehudar.ca/',
+  'mf': 'https://shopmountainfruit.com/',
+  'mm': 'https://marketmavenmd.com/',
+  'moti': 'https://motismarket.com/',
+  'nutmeg': 'https://nutmegkoshermarket.com/',
+  'ref': 'https://refreshfruits.com/',
+  'rk': 'https://rocklandkosher.com/',
+  'rose': 'https://rosemarykosher.com/',
+  'sara': 'https://sarahstentkoshermarket.com/',
+  'sea': 'https://seattlekosher.com/',
+  'shau': 'https://shaulysmeat.com/',
+  'shlo': 'https://shlomoskosher.com/',
+  'shoppe': 'https://theshoppeli.com/',
+  'sk': 'https://seasonskosher.com/',
+  'skop': 'https://skoppssupermarket.com/',
+  'ss': 'https://superstopnj.com/',
+  'was': 'https://wassermansupermarket.com/',
+  'wk': 'https://westernkosher.com/ap',
+  'yes': 'https://yesmarketmiami.com/',
+  'zipk': 'https://zipkosher.com/'
+};
+
 // Cache for current staging site details and deployments for copying test data table
 let currentStoreName = '';
 let currentStageName = '';
 let currentDeployments = [];
 let currentBuildsCache = {};
+
+/**
+ * Extract hostname from a URL string safely.
+ */
+function getHostname(urlStr) {
+  try {
+    return new URL(urlStr).hostname.toLowerCase();
+  } catch (e) {
+    return '';
+  }
+}
+
+/**
+ * Determine store name and stage name from current page URL.
+ */
+function getStoreAndStageFromUrl(url) {
+  const hostname = url.hostname.toLowerCase();
+  
+  // 1. Check staging patterns like store.qa5.mycloudgrocer.com
+  const stageMatch = hostname.match(/^([^.]+)\.(qa[1-6]|pd[1-6]|dev[1-6]|qa|pd|dev)\.mycloudgrocer\.com$/i);
+  if (stageMatch) {
+    return { storeName: stageMatch[1], stageName: stageMatch[2].toLowerCase() };
+  }
+  
+  // 2. Check *.prod.mycloudgrocer.com pattern
+  const prodSubdomainMatch = hostname.match(/^([^.]+)\.prod\.mycloudgrocer\.com$/i);
+  if (prodSubdomainMatch) {
+    return { storeName: prodSubdomainMatch[1], stageName: 'prod' };
+  }
+  
+  // 3. Check custom prod domains
+  for (const [storeKey, prodUrl] of Object.entries(PROD_MAP)) {
+    const prodHost = getHostname(prodUrl);
+    if (prodHost) {
+      if (hostname === prodHost || hostname.endsWith('.' + prodHost)) {
+        return { storeName: storeKey, stageName: 'prod' };
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Calculate the target URL for stage switching.
+ */
+function getTargetUrl(targetStage, storeName, currentUrlStr) {
+  const currentUrl = new URL(currentUrlStr);
+  
+  // Identify the production base URL for this store
+  let prodBaseUrlStr = '';
+  if (PROD_MAP[storeName]) {
+    prodBaseUrlStr = PROD_MAP[storeName];
+  } else {
+    prodBaseUrlStr = `https://${storeName}.prod.mycloudgrocer.com/`;
+  }
+  const prodBaseUrl = new URL(prodBaseUrlStr);
+  
+  // Extract relative path (stripping prod pathname prefix if present on prod site)
+  let relativePath = currentUrl.pathname;
+  if (currentUrl.hostname === prodBaseUrl.hostname || currentUrl.hostname.endsWith('.' + prodBaseUrl.hostname)) {
+    const prodPrefix = prodBaseUrl.pathname.replace(/\/$/, '');
+    if (prodPrefix && relativePath.startsWith(prodPrefix)) {
+      relativePath = relativePath.slice(prodPrefix.length);
+    }
+  }
+  
+  if (!relativePath.startsWith('/')) {
+    relativePath = '/' + relativePath;
+  }
+  
+  let targetUrlStr = '';
+  if (targetStage === 'prod') {
+    const base = prodBaseUrl.origin + prodBaseUrl.pathname.replace(/\/$/, '');
+    targetUrlStr = base + relativePath + currentUrl.search + currentUrl.hash;
+  } else {
+    targetUrlStr = `https://${storeName}.${targetStage}.mycloudgrocer.com` + relativePath + currentUrl.search + currentUrl.hash;
+  }
+  
+  return targetUrlStr;
+}
+
+/**
+ * Setup stage switcher buttons.
+ */
+function setupStageSwitcher(tab, storeName, currentStage) {
+  const stages = ['qa5', 'qa6', 'dev5', 'dev6', 'prod'];
+  
+  stages.forEach(stage => {
+    const btn = document.getElementById(`btn-stage-${stage}`);
+    if (!btn) return;
+    
+    const isCurrent = (stage === 'prod' && currentStage.toLowerCase() === 'prod') || 
+                      (stage !== 'prod' && currentStage.toLowerCase() === stage);
+                      
+    if (isCurrent) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+      
+      // Clone to remove old listeners (just in case setup is called multiple times)
+      const newBtn = btn.cloneNode(true);
+      btn.parentNode.replaceChild(newBtn, btn);
+      
+      newBtn.addEventListener('click', async () => {
+        const targetUrl = getTargetUrl(stage, storeName, tab.url);
+        await chrome.tabs.update(tab.id, { url: targetUrl });
+        window.close();
+      });
+    }
+  });
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Show version from manifest
@@ -41,11 +206,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const url = new URL(tab.url);
-    const stageMatch = url.hostname.match(/^([^.]+)\.(qa[1-6]|pd[1-6]|dev[1-6]|qa|pd|dev)\.mycloudgrocer\.com$/i);
+    const matchedDetails = getStoreAndStageFromUrl(url);
 
-    if (stageMatch) {
-      const storeName = stageMatch[1];
-      const stageName = stageMatch[2];
+    if (matchedDetails) {
+      const storeName = matchedDetails.storeName;
+      const stageName = matchedDetails.stageName;
       currentStoreName = storeName;
       currentStageName = stageName;
       
@@ -61,7 +226,24 @@ document.addEventListener('DOMContentLoaded', async () => {
         await setupQuickActions(tab);
       }
       
-      await loadDeployments(storeName, stageName);
+      const stagesEl = document.getElementById('stages-section');
+      if (stagesEl) {
+        stagesEl.style.display = 'flex';
+        setupStageSwitcher(tab, storeName, stageName);
+      }
+      
+      try {
+        await loadDeployments(storeName, stageName);
+      } catch (depErr) {
+        console.warn('[MCG Helper] Failed to load deployments for stage:', stageName, depErr);
+        const deploymentsListEl = document.getElementById('deployments-list');
+        if (deploymentsListEl) {
+          deploymentsListEl.innerHTML = `<div class="no-deployments">Deployments information not available for ${stageName.toUpperCase()}</div>`;
+        }
+        if (deploymentsEl) {
+          deploymentsEl.style.display = 'flex';
+        }
+      }
       
       // Update header when finished
       statusText.textContent = `${storeName.toUpperCase()} ${stageName.toUpperCase()}`;
