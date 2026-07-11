@@ -129,6 +129,15 @@
   "content_scripts": [
     {
       "matches": [
+        "https://bugs.mycloudgrocer.com/"
+      ],
+      "js": [
+        "content/redirect.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
         "https://bugs.mycloudgrocer.com/*"
       ],
       "js": [

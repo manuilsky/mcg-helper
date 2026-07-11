@@ -68,6 +68,51 @@
     'zipk': 'https://zipkosher.com/'
   };
 
+  // ── Login page handler: focus login button on autofill ────────
+  if (/login_form\.aspx/i.test(window.location.pathname)) {
+    let isFocused = false;
+
+    const checkAndFocusLogin = () => {
+      if (isFocused) return;
+
+      const loginButton = document.querySelector('input.login-button[type="submit"], input[name="login_submit"]');
+      if (!loginButton) return;
+
+      // If button is already focused
+      if (document.activeElement === loginButton) {
+        isFocused = true;
+        return;
+      }
+
+      // Bind a focus event listener if we haven't already, to catch manual focus
+      if (!loginButton.dataset.focusBound) {
+        loginButton.addEventListener('focus', () => {
+          isFocused = true;
+        }, { once: true });
+        loginButton.dataset.focusBound = 'true';
+      }
+
+      const inputs = document.querySelectorAll('input[type="text"], input[type="password"], input[type="email"]');
+
+      const isAutofilledOrNotEmpty = Array.from(inputs).some(input => 
+        input.value.trim() !== '' || input.matches(':-webkit-autofill')
+      );
+
+      if (isAutofilledOrNotEmpty) {
+        loginButton.focus();
+        isFocused = true;
+      }
+    };
+
+    checkAndFocusLogin();
+    window.addEventListener('load', checkAndFocusLogin);
+    setTimeout(checkAndFocusLogin, 100);
+    setTimeout(checkAndFocusLogin, 300);
+    setTimeout(checkAndFocusLogin, 600);
+    setTimeout(checkAndFocusLogin, 1000);
+    return;
+  }
+
   // ── Only run on task pages ───────────────────────────────────
   if (!MCGUtils.isTaskPage()) {
     console.log('[MCG Helper] Not a task page, skipping toolbar injection.');
