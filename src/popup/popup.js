@@ -232,7 +232,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       currentStageName = stageName;
       
       // Set min-height immediately to prevent Chrome popup clipping bug on async load
-      document.body.style.minHeight = '380px';
+      document.body.style.minHeight = '700px';
       
       // Hide status bar on storefront pages
       statusEl.style.display = 'none';
