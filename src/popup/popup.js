@@ -217,8 +217,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Set min-height immediately to prevent Chrome popup clipping bug on async load
       document.body.style.minHeight = '380px';
       
-      statusText.textContent = `Loading: ${storeName.toUpperCase()} ${stageName.toUpperCase()}`;
-      statusEl.classList.add('active');
+      // Hide status bar on storefront pages
+      statusEl.style.display = 'none';
       
       const quickActionsEl = document.getElementById('quick-actions-section');
       if (quickActionsEl) {
@@ -244,9 +244,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           deploymentsEl.style.display = 'flex';
         }
       }
-      
-      // Update header when finished
-      statusText.textContent = `${storeName.toUpperCase()} ${stageName.toUpperCase()}`;
     } else {
       const isMCG = url.hostname === 'bugs.mycloudgrocer.com';
       const isTaskPage = /edit_bug\.aspx/i.test(url.pathname);
@@ -615,6 +612,18 @@ function showQaButtonFeedback(btnId, msg) {
  * Setup event listeners for staging page Quick Actions
  */
 async function setupQuickActions(tab) {
+  // Check header presence in the tab
+  let isHeaderPresent = false;
+  try {
+    const [{ result }] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => document.querySelector('.store-main-page-header-content') !== null
+    });
+    isHeaderPresent = result;
+  } catch (err) {
+    console.warn('[MCG Helper] Failed to check header presence:', err);
+  }
+
   const btnLogin = document.getElementById('btn-qa-login');
   if (btnLogin) {
     // Clone button to strip any pre-existing listeners
@@ -885,6 +894,47 @@ async function setupQuickActions(tab) {
       }
     });
   }
+
+  const setupNavigationAction = (btnId, parentName, tabName) => {
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    
+    const newBtn = btn.cloneNode(true);
+    btn.parentNode.replaceChild(newBtn, btn);
+
+    if (!isHeaderPresent) {
+      newBtn.disabled = true;
+      const tooltip = newBtn.querySelector('.qa-tooltip');
+      if (tooltip) {
+        tooltip.textContent = 'Menu button not found';
+      }
+      return;
+    }
+
+    newBtn.addEventListener('click', async () => {
+      try {
+        try {
+          await chrome.tabs.sendMessage(tab.id, {
+            type: 'TRIGGER_QUICK_ACTION',
+            parent: parentName,
+            tab: tabName
+          });
+        } catch (e) {
+          console.warn('[MCG Helper] Content script not loaded or listening yet:', e);
+        }
+
+        window.close();
+      } catch (err) {
+        console.error('[MCG Helper] Action navigation failed:', err);
+      }
+    });
+  };
+
+  setupNavigationAction('btn-qa-admin-site-config', 'Admin', 'Site Config');
+  setupNavigationAction('btn-qa-admin-deli-menus', 'Admin', 'Deli Menus');
+  setupNavigationAction('btn-qa-settings-store-general', 'Settings', 'Store General');
+  setupNavigationAction('btn-qa-settings-service-areas', 'Settings', 'Service Areas');
+  setupNavigationAction('btn-qa-settings-checkout-instructions', 'Settings', 'Checkout Insturctions');
 }
 
 /**

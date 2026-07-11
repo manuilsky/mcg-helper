@@ -96,4 +96,226 @@
       }
     }
   }
+
+  function matchTabText(text, target) {
+    const t = text.toLowerCase().trim().replace(/\s+/g, ' ');
+    const g = target.toLowerCase().trim().replace(/\s+/g, ' ');
+    
+    if (g.includes('checkout inst')) {
+      return t.includes('checkout inst');
+    }
+    
+    return t === g || t.includes(g) || g.includes(t);
+  }
+
+  function selectLeftMenuTab(tabName) {
+    return new Promise((resolve) => {
+      let attempts = 0;
+      const maxAttempts = 60; // 6 seconds
+      const interval = setInterval(() => {
+        attempts++;
+        
+        let tabs = Array.from(document.querySelectorAll('.profile-admin-content button.MuiTab-root'));
+      console.log('tabs', tabs)
+        if (tabs.length === 0) {
+          tabs = Array.from(document.querySelectorAll('button.MuiTab-root'));
+        }
+
+        if (tabs.length > 0) {
+          const targetTab = tabs.find(btn => {
+            const wrapper = btn.querySelector('span.MuiTab-wrapper');
+            if (!wrapper) return false;
+            const text = wrapper.textContent || '';
+            return matchTabText(text, tabName);
+          });
+
+          if (targetTab) {
+            clearInterval(interval);
+            targetTab.click();
+            resolve(true);
+            return;
+          }
+        }
+
+        if (attempts >= maxAttempts) {
+          clearInterval(interval);
+          resolve(false);
+        }
+      }, 100);
+    });
+  }
+
+  function waitForPathAndClickTab(targetParentPath, tabName) {
+    let attempts = 0;
+    const maxAttempts = 100; // 10 seconds max
+    const interval = setInterval(async () => {
+      attempts++;
+      const currentPath = window.location.pathname.toLowerCase();
+      
+      console.log(`[MCG Helper] Waiting for path "${targetParentPath}" and tab "${tabName}". Current path: "${currentPath}"`);
+      if (currentPath === targetParentPath || currentPath.startsWith(targetParentPath)) {
+        clearInterval(interval);
+        await selectLeftMenuTab(tabName);
+      }
+      
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
+        console.warn(`[MCG Helper] Timed out waiting for path "${targetParentPath}" and tab "${tabName}"`);
+      }
+    }, 100);
+  }
+
+  function openMenuAndClickParent(parentName, targetParentPath, tabName) {
+    const userActionBtn = document.querySelector('#mcg-user-action-button');
+    if (!userActionBtn) return;
+    
+    const initialDrawer = document.querySelector('.MuiDrawer-root .sidebar-content');
+    if (!initialDrawer || window.getComputedStyle(initialDrawer).visibility === 'hidden') {
+      userActionBtn.click();
+    }
+    
+    let attempts = 0;
+    const maxAttempts = 60; // 3 seconds max
+    const interval = setInterval(() => {
+      attempts++;
+      
+      const drawer = document.querySelector('.MuiDrawer-root');
+      if (drawer) {
+        const anchors = Array.from(drawer.querySelectorAll('a'));
+        const targetPathNormalized = targetParentPath.toLowerCase().replace(/\/$/, '');
+        
+        let parentLink = anchors.find(a => {
+          try {
+            const path = a.pathname.toLowerCase().replace(/\/$/, '');
+            return path === targetPathNormalized;
+          } catch (e) {
+            return false;
+          }
+        });
+                         
+        if (!parentLink) {
+          parentLink = drawer.querySelector(`a.menu-button[href*="${targetParentPath}"]`) ||
+                       drawer.querySelector(`a[href*="${targetParentPath}"]`);
+        }
+        
+        if (!parentLink) {
+          const links = Array.from(drawer.querySelectorAll('a, .menu-button, [role="button"]'));
+          parentLink = links.find(l => {
+            const text = (l.textContent || '').trim().toLowerCase();
+            return text === parentName.toLowerCase() || text.includes(parentName.toLowerCase());
+          });
+        }
+        
+        if (parentLink) {
+          clearInterval(interval);
+          parentLink.click();
+          waitForPathAndClickTab(targetParentPath, tabName);
+          return;
+        }
+      }
+      
+      if (attempts >= maxAttempts) {
+        clearInterval(interval);
+        console.warn(`[MCG Helper] Timed out waiting for drawer or parent link "${parentName}"`);
+      }
+    }, 50);
+  }
+
+  let loginMonitorInterval = null;
+  function monitorLoginSuccess(callback) {
+    if (loginMonitorInterval) {
+      clearInterval(loginMonitorInterval);
+    }
+    
+    let attempts = 0;
+    const maxAttempts = 60; // 30 seconds max
+    loginMonitorInterval = setInterval(() => {
+      attempts++;
+      
+      const userActionBtn = document.querySelector('#mcg-user-action-button');
+      if (userActionBtn) {
+        clearInterval(loginMonitorInterval);
+        loginMonitorInterval = null;
+        if (callback) callback();
+      }
+      
+      if (attempts >= maxAttempts) {
+        clearInterval(loginMonitorInterval);
+        loginMonitorInterval = null;
+      }
+    }, 500);
+  }
+
+  async function handleLoginBeforeAction(callback) {
+    await chrome.storage.local.set({
+      autoLogin: {
+        username: "nick@mycloudgrocer.com",
+        password: "Password2!",
+        timestamp: Date.now()
+      }
+    });
+
+    const loginBtn = document.querySelector('#mcg-login-button');
+    if (loginBtn) {
+      loginBtn.click();
+      
+      let attempts = 0;
+      const maxAttempts = 30; // 3 seconds
+      const interval = setInterval(() => {
+        attempts++;
+        const emailInput = document.querySelector('input[type="email"]') ||
+                           document.querySelector('input[name="email" i]') ||
+                           document.querySelector('input[id="email" i]') ||
+                           document.querySelector('input[name="username" i]') ||
+                           document.querySelector('input[id="username" i]');
+
+        const passwordInput = document.querySelector('input[type="password"]') ||
+                              document.querySelector('input[name="password" i]') ||
+                              document.querySelector('input[id="password" i]');
+                              
+        if (emailInput && passwordInput) {
+          clearInterval(interval);
+          performLogin("nick@mycloudgrocer.com", "Password2!");
+          monitorLoginSuccess(callback);
+        }
+        
+        if (attempts >= maxAttempts) {
+          clearInterval(interval);
+          monitorLoginSuccess(callback);
+        }
+      }, 100);
+    }
+  }
+
+  async function runQuickAction(parent, tab) {
+    const userActionBtn = document.querySelector('#mcg-user-action-button');
+    if (!userActionBtn) {
+      const loginBtn = document.querySelector('#mcg-login-button');
+      if (loginBtn) {
+        await handleLoginBeforeAction(() => runQuickAction(parent, tab));
+      } else {
+        if (window.location.pathname.toLowerCase().includes('/login')) {
+          monitorLoginSuccess(() => runQuickAction(parent, tab));
+          return;
+        }
+      }
+      monitorLoginSuccess(() => runQuickAction(parent, tab));
+      return;
+    }
+
+    const currentPath = window.location.pathname.toLowerCase();
+    const targetParentPath = parent.toLowerCase() === 'admin' ? '/profile/admin' : '/profile/settings';
+
+    if (currentPath.startsWith(targetParentPath)) {
+      await selectLeftMenuTab(tab);
+    } else {
+      openMenuAndClickParent(parent, targetParentPath, tab);
+    }
+  }
+
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message && message.type === 'TRIGGER_QUICK_ACTION') {
+      runQuickAction(message.parent, message.tab);
+    }
+  });
 })();

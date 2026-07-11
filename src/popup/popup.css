@@ -336,7 +336,22 @@ body {
 .popup-quick-actions {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+}
+
+.quick-actions-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quick-actions-subtitle {
+  font-size: 9px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 2px;
 }
 
 .quick-actions-list {
@@ -445,18 +460,18 @@ body {
 }
 
 /* Align the first button's tooltip to the left to prevent clipping at the window edge */
-#btn-qa-login .qa-tooltip {
+.quick-actions-list .qa-btn:first-child .qa-tooltip {
   left: 0;
   transform: translateY(-6px);
 }
 
-#btn-qa-login .qa-tooltip::after,
-#btn-qa-login .qa-tooltip::before {
+.quick-actions-list .qa-btn:first-child .qa-tooltip::after,
+.quick-actions-list .qa-btn:first-child .qa-tooltip::before {
   left: 18px;
 }
 
-#btn-qa-login:hover .qa-tooltip,
-#btn-qa-login.force-tooltip .qa-tooltip {
+.quick-actions-list .qa-btn:first-child:hover .qa-tooltip,
+.quick-actions-list .qa-btn:first-child.force-tooltip .qa-tooltip {
   transform: translateY(-8px);
 }
 
