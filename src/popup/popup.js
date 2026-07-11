@@ -150,9 +150,10 @@ function getTargetUrl(targetStage, storeName, currentUrlStr) {
  */
 function setupStageSwitcher(tab, storeName, currentStage) {
   const stages = ['qa5', 'qa6', 'dev5', 'dev6', 'prod'];
+  const storeUpper = storeName.toUpperCase();
   
   stages.forEach(stage => {
-    const btn = document.getElementById(`btn-stage-${stage}`);
+    let btn = document.getElementById(`btn-stage-${stage}`);
     if (!btn) return;
     
     const isCurrent = (stage === 'prod' && currentStage.toLowerCase() === 'prod') || 
@@ -166,12 +167,28 @@ function setupStageSwitcher(tab, storeName, currentStage) {
       // Clone to remove old listeners (just in case setup is called multiple times)
       const newBtn = btn.cloneNode(true);
       btn.parentNode.replaceChild(newBtn, btn);
+      btn = newBtn;
       
-      newBtn.addEventListener('click', async () => {
+      btn.addEventListener('click', async () => {
         const targetUrl = getTargetUrl(stage, storeName, tab.url);
         await chrome.tabs.update(tab.id, { url: targetUrl });
         window.close();
       });
+    }
+    
+    // Find or create tooltip inside the active button element
+    let tooltip = btn.querySelector('.qa-tooltip');
+    if (!tooltip) {
+      tooltip = document.createElement('span');
+      tooltip.className = 'qa-tooltip';
+      btn.appendChild(tooltip);
+    }
+    
+    const stageUpper = stage.toUpperCase();
+    if (isCurrent) {
+      tooltip.textContent = `Current Stage: ${storeUpper} ${stageUpper}`;
+    } else {
+      tooltip.textContent = `Switch to ${storeUpper} ${stageUpper}`;
     }
   });
 }
@@ -612,16 +629,35 @@ function showQaButtonFeedback(btnId, msg) {
  * Setup event listeners for staging page Quick Actions
  */
 async function setupQuickActions(tab) {
-  // Check header presence in the tab
+  // Check header presence and admin access in the tab
   let isHeaderPresent = false;
+  let hasAdminAccess = true;
   try {
     const [{ result }] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: () => document.querySelector('.store-main-page-header-content') !== null
+      func: () => {
+        const header = document.querySelector('.store-main-page-header-content');
+        if (!header) {
+          return { isHeaderPresent: false, hasAdminAccess: true };
+        }
+        
+        const isLoggedIn = document.querySelector('#mcg-user-action-button') !== null;
+        let hasAdminAccess = true;
+        if (isLoggedIn) {
+          const titles = Array.from(document.querySelectorAll('.store-menu-icon-wrapper > .content-title'));
+          const hasManage = titles.some(t => (t.textContent || '').trim().toLowerCase() === 'manage');
+          hasAdminAccess = hasManage;
+        }
+        
+        return { isHeaderPresent: true, hasAdminAccess };
+      }
     });
-    isHeaderPresent = result;
+    if (result) {
+      isHeaderPresent = result.isHeaderPresent;
+      hasAdminAccess = result.hasAdminAccess;
+    }
   } catch (err) {
-    console.warn('[MCG Helper] Failed to check header presence:', err);
+    console.warn('[MCG Helper] Failed to check header/access presence:', err);
   }
 
   const btnLogin = document.getElementById('btn-qa-login');
@@ -907,6 +943,15 @@ async function setupQuickActions(tab) {
       const tooltip = newBtn.querySelector('.qa-tooltip');
       if (tooltip) {
         tooltip.textContent = 'Menu button not found';
+      }
+      return;
+    }
+
+    if (!hasAdminAccess) {
+      newBtn.disabled = true;
+      const tooltip = newBtn.querySelector('.qa-tooltip');
+      if (tooltip) {
+        tooltip.textContent = 'No admin access';
       }
       return;
     }
