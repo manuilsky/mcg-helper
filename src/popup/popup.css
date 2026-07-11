@@ -484,30 +484,30 @@ body {
 }
 
 /* Align the last button's tooltip to the right to prevent clipping at the window edge */
-.quick-actions-list .qa-btn:last-child .qa-tooltip,
-.stages-list .stage-btn:last-child .qa-tooltip {
+#btn-qa-settings-checkout-instructions .qa-tooltip,
+#btn-stage-prod .qa-tooltip {
   left: auto;
   right: 0;
   transform: translateY(-6px);
 }
 
-.quick-actions-list .qa-btn:last-child .qa-tooltip::after,
-.quick-actions-list .qa-btn:last-child .qa-tooltip::before {
+#btn-qa-settings-checkout-instructions .qa-tooltip::after,
+#btn-qa-settings-checkout-instructions .qa-tooltip::before {
   left: auto;
   right: 18px;
   transform: translateX(50%);
 }
 
-.stages-list .stage-btn:last-child .qa-tooltip::after,
-.stages-list .stage-btn:last-child .qa-tooltip::before {
+#btn-stage-prod .qa-tooltip::after,
+#btn-stage-prod .qa-tooltip::before {
   left: auto;
   right: 20px;
   transform: translateX(50%);
 }
 
-.quick-actions-list .qa-btn:last-child:hover .qa-tooltip,
-.quick-actions-list .qa-btn:last-child.force-tooltip .qa-tooltip,
-.stages-list .stage-btn:last-child:hover .qa-tooltip {
+#btn-qa-settings-checkout-instructions:hover .qa-tooltip,
+#btn-qa-settings-checkout-instructions.force-tooltip .qa-tooltip,
+#btn-stage-prod:hover .qa-tooltip {
   transform: translateY(-8px);
 }
 
