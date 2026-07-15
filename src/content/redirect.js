@@ -7,8 +7,9 @@
 (function () {
   'use strict';
 
-  // Safeguard: only redirect if path is exactly '/' or empty
-  if (window.location.pathname === '/' || window.location.pathname === '') {
-    window.location.replace('https://bugs.mycloudgrocer.com/login_form.aspx');
+  // Safeguard: only redirect if path is root or default.aspx
+  const pathname = window.location.pathname.toLowerCase();
+  if (pathname === '/' || pathname === '' || pathname === '/default.aspx') {
+    window.location.replace('https://bugs.mycloudgrocer.com/login_form.aspx' + window.location.search);
   }
 })();

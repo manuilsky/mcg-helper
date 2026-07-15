@@ -129,7 +129,9 @@
   "content_scripts": [
     {
       "matches": [
-        "https://bugs.mycloudgrocer.com/"
+        "https://bugs.mycloudgrocer.com/",
+        "https://bugs.mycloudgrocer.com/default.aspx",
+        "https://bugs.mycloudgrocer.com/default.aspx*"
       ],
       "js": [
         "content/redirect.js"
